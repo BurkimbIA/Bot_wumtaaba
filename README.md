@@ -30,6 +30,10 @@ Un contrôle avant chaque envoi vérifie consentement, STOP, état de l’accord
 
 Le calendrier est intégré à la base et consultable dans WhatsApp, sans synchronisation Google Calendar. Voir [le schéma et l’exploitation](docs/DATABASE.md).
 
+## Back-office administrateur — version 0.3
+
+Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, recherche d’accords, conversations avec audios/transcriptions et suivi des rappels. Cette première version est en lecture seule, protégée par une session administrateur. Le code d’accès est dans le fichier local privé `.admin-access.txt` ; il ne figure pas dans GitHub. Voir [la configuration et les limites](docs/ADMIN.md).
+
 ## Démarrer en local
 
 Python 3.12 ou plus récent est nécessaire.

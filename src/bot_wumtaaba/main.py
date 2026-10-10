@@ -12,6 +12,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
+from .admin import install_admin
 from .clients import Intelligence, MediaError, WhatsApp
 from .config import Settings
 from .conversation import Conversation
@@ -181,7 +182,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.2.0",
+        version="0.3.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -193,7 +194,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.2.0"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.3.0"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):
@@ -255,6 +256,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         # Accuser réception seulement après écriture durable en SQLite.
         return {"status": "accepted"}
 
+    install_admin(app, settings)
     return app
 
 

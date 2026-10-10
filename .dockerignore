@@ -15,3 +15,5 @@ data
 *.mp3
 *.wav
 tests
+
+.admin-access.txt

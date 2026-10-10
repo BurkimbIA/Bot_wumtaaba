@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     reminder_enabled: bool = True
     reminder_template_name: str = ""
     reminder_template_language: str = "fr"
+    admin_password: SecretStr = SecretStr("")
+    admin_cookie_secure: bool = True
     support_contact: str = "L’équipe Wuumtaaba"
 
     @property

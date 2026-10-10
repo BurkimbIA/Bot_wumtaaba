@@ -44,7 +44,7 @@ class Conversation:
                         "Décris l’accord en un message ou un vocal : client, produit, prix total, "
                         "avance et date prévue. Exemple : Awa, 2 sacs de riz, 30 000 F, "
                         "10 000 F payés, solde le 20 décembre 2026.\n\n"
-                        "Le texte est analysé par OpenAI pour préparer le résumé. "
+                        "Le texte est analysé par Google Gemini pour préparer le résumé. "
                         "Vérifie-le avant d’enregistrer. Écris « annuler » pour quitter."
                     )
                 ],
@@ -59,8 +59,8 @@ class Conversation:
                         "2 — Mes accords : consulte tes accords enregistrés.\n"
                         "« menu » ou « annuler » : abandonner le brouillon.\n\n"
                         "Les accords sont des notes personnelles, pas une validation du client. "
-                        "Les textes sont analysés par OpenAI. Chaque vocal demande ton accord avant "
-                        "téléchargement et transcription via OpenAI. "
+                        "Les textes sont analysés par Google Gemini. Chaque vocal demande ton accord avant "
+                        "téléchargement et transcription via Google Gemini. "
                         f"Pilote : accords et messages supprimés automatiquement après "
                         f"{self.settings.retention_days} jours. "
                         f"Assistance : {self.settings.support_contact}."
@@ -122,7 +122,7 @@ class Conversation:
                 [
                     buttons(
                         "Pour ce vocal, autorises-tu Wuumtaaba à le télécharger depuis Meta et à "
-                        "le transmettre à OpenAI pour une transcription en français ? Le fichier "
+                        "le transmettre à Google Gemini pour une transcription en français ? Le fichier "
                         "n’est pas conservé sur notre serveur. Le texte sera affiché ici.",
                         [(f"audio:{token}", "Accepter"), (f"refuse:{token}", "Refuser")],
                     )

@@ -14,7 +14,7 @@ def settings(**kwargs):
     return Settings(
         _env_file=None,
         whatsapp_token="test-meta",
-        openai_api_key="test-ai",
+        gemini_api_key="test-ai",
         whatsapp_phone_number_id="123",
         **kwargs,
     )
@@ -115,30 +115,73 @@ async def test_media_redirect_is_not_followed():
     assert seen == ["graph.facebook.com", "lookaside.fbsbx.com"]
 
 
-async def test_transcription_is_french_multipart():
+def gemini_response(text, reason="STOP"):
+    return {"candidates": [{"finishReason": reason, "content": {"parts": [{"text": text}]}}]}
+
+
+async def test_transcription_is_french_inline_audio():
     def handler(request):
-        assert request.url.path == "/v1/audio/transcriptions"
-        assert "multipart/form-data" in request.headers["content-type"]
-        assert b'name="language"\r\n\r\nfr' in request.content
-        assert b'filename="vocal.ogg"' in request.content
-        assert b"voice-bytes" in request.content
-        return httpx.Response(200, json={"text": "  Bonjour monsieur  "})
+        assert request.url.host == "generativelanguage.googleapis.com"
+        assert request.url.path.endswith(":generateContent")
+        assert request.headers["x-goog-api-key"] == "test-ai"
+        assert "test-ai" not in str(request.url)
+        payload = json.loads(request.content)
+        assert payload["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "LOW"}
+        assert "française" in payload["systemInstruction"]["parts"][0]["text"]
+        audio = payload["contents"][0]["parts"][0]["inlineData"]
+        assert audio["mimeType"] == "audio/ogg"
+        assert base64.b64decode(audio["data"]) == b"voice-bytes"
+        return httpx.Response(200, json=gemini_response('{"transcription": "  Bonjour monsieur  "}'))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
-        assert (
-            await Intelligence(settings(), http).transcribe(
-                b"voice-bytes", "vocal.ogg", "audio/ogg"
-            )
-            == "Bonjour monsieur"
-        )
+        assert await Intelligence(settings(), http).transcribe(
+            b"voice-bytes", "vocal.ogg", "audio/ogg"
+        ) == "Bonjour monsieur"
 
 
-async def test_empty_transcription_rejected():
+@pytest.mark.parametrize("text", ['{"transcription":"  "}', '{"transcription":4}',
+                                  '{"transcription":"ok","extra":true}', '[]'])
+async def test_invalid_transcription_rejected(text):
     async with httpx.AsyncClient(
-        transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"text": "  "}))
+        transport=httpx.MockTransport(lambda r: httpx.Response(200, json=gemini_response(text)))
     ) as http:
         with pytest.raises(MediaError):
             await Intelligence(settings(), http).transcribe(b"voice", "vocal.ogg", "audio/ogg")
+
+
+@pytest.mark.parametrize("reason", ["MAX_TOKENS", "SAFETY", "RECITATION", None])
+async def test_partial_or_blocked_gemini_output_is_never_accepted(reason):
+    async with httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda r: httpx.Response(200, json=gemini_response('{"transcription":"partial"}', reason))
+    )) as http:
+        with pytest.raises(MediaError):
+            await Intelligence(settings(), http).transcribe(b"voice", "vocal.ogg", "audio/ogg")
+
+
+async def test_audio_limit_checked_before_gemini_call():
+    def handler(request):
+        pytest.fail("Oversized audio must never be sent")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(MediaError):
+            await Intelligence(settings(max_audio_bytes=1024), http).transcribe(
+                b"x" * 1025, "vocal.ogg", "audio/ogg"
+            )
+
+
+async def test_gemini_redirect_never_receives_api_key():
+    seen = []
+
+    def handler(request):
+        seen.append(request.url.host)
+        return httpx.Response(302, headers={"location": "https://evil.test"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), follow_redirects=True
+    ) as http:
+        with pytest.raises(httpx.HTTPStatusError):
+            await Intelligence(settings(), http).transcribe(b"voice", "vocal.ogg", "audio/ogg")
+    assert seen == ["generativelanguage.googleapis.com"]
 
 
 @pytest.mark.parametrize(
@@ -153,10 +196,9 @@ async def test_empty_transcription_rejected():
 async def test_extraction_schema_and_local_validation(extra, valid):
     def handler(request):
         payload = json.loads(request.content)
-        schema = payload["response_format"]["json_schema"]
-        assert schema["strict"] is True
-        assert schema["schema"]["additionalProperties"] is False
-        user_data = json.loads(payload["messages"][1]["content"])
+        schema = payload["generationConfig"]["responseJsonSchema"]
+        assert schema["additionalProperties"] is False
+        user_data = json.loads(payload["contents"][0]["parts"][0]["text"])
         assert user_data["brouillon"] == {"client": "Awa"}
         content = {
             "client": "Awa",
@@ -167,7 +209,7 @@ async def test_extraction_schema_and_local_validation(extra, valid):
             **extra,
         }
         return httpx.Response(
-            200, json={"choices": [{"message": {"content": json.dumps(content)}}]}
+            200, json=gemini_response(json.dumps(content))
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:

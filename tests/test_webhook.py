@@ -20,7 +20,7 @@ def settings(tmp_path):
         whatsapp_token="test-meta",
         meta_app_secret="test-secret",
         webhook_verify_token="test-verify-token-24-characters",
-        openai_api_key="test-ai",
+        gemini_api_key="test-ai",
         whatsapp_phone_number_id="123",
         allowed_senders="22670000000",
         database_path=tmp_path / "test.sqlite3",

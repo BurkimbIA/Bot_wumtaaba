@@ -5,10 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
-RUN groupadd --system bot && useradd --system --gid bot --home-dir /app bot
+RUN groupadd --gid 10001 bot && useradd --uid 10001 --gid bot --home-dir /app bot
 COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
 RUN pip install -r requirements.lock && pip install --no-deps . && mkdir -p /app/data && chown -R bot:bot /app/data
-USER bot
+COPY scripts/container_start.py /app/container_start.py
 EXPOSE 8000
-CMD ["uvicorn", "bot_wumtaaba.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+ENTRYPOINT ["python", "/app/container_start.py"]
+CMD ["uvicorn", "bot_wumtaaba.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]

@@ -18,7 +18,7 @@ def main() -> int:
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    print("Configuration locale valide. Aucun appel Meta ou OpenAI effectué.")
+    print("Configuration locale valide. Aucun appel Meta ou Google Gemini effectué.")
     print("Prochaine étape : vérifier le webhook HTTPS et effectuer la recette WhatsApp.")
     return 0
 

@@ -4,9 +4,11 @@
 
 Dans l’application Meta liée au bot, retrouver le numéro WhatsApp et son identifiant, le token d’accès et le secret de l’application. Les reporter dans `.env`, jamais dans GitHub. Un identifiant déjà présent dans `.env.example` est à vérifier contre l’application actuellement utilisée.
 
+Le token utilisateur Meta de longue durée installé expire le **9 décembre 2026 à 13:10:50 UTC**. Planifier son renouvellement ou la configuration d’un token d’utilisateur système adapté à une exploitation prolongée.
+
 Ajouter son téléphone comme destinataire de test dans Meta, puis le vérifier. Ajouter le même numéro à `ALLOWED_SENDERS` au format international sans espaces et sans `+`. Ces deux autorisations sont distinctes.
 
-Créer une clé OpenAI pour le projet utilisé et la conserver dans `OPENAI_API_KEY`. Le script de vérification ne contrôle pas la facturation ou l’accès effectif aux modèles.
+Dans [Google AI Studio](https://aistudio.google.com/api-keys), créer une clé API pour le projet Google utilisé, puis la conserver dans `GEMINI_API_KEY`. Saisir les clés localement avec `python scripts/setup_secrets.py`, qui masque la saisie. Les modèles de transcription et d’extraction sont configurables et utilisent `gemini-3.8-flash` par défaut. Le script `check_config.py` ne contrôle pas la facturation, les quotas ou l’accès effectif aux modèles.
 
 ## Enregistrer le webhook
 
@@ -29,7 +31,7 @@ Ouvrir la conversation avec le numéro de test depuis WhatsApp Desktop ou WhatsA
 | Texte | Choisir Nouvel accord, envoyer l’exemple du README | Résumé avec total 30 000, avance 10 000, reste 20 000 F CFA |
 | Correction | Demander de changer l’avance à 12 000 | Résumé recalculé avec reste 18 000 F CFA avant confirmation |
 | Enregistrement | Confirmer le résumé correct | Confirmation puis accord visible dans Mes accords |
-| Vocal | Démarrer un nouvel accord et dicter une vente fictive en français | Transcription renvoyée dans WhatsApp, puis résumé ou question ciblée |
+| Vocal | Démarrer un nouvel accord et dicter une vente fictive en français | Demande de consentement ; après acceptation, transcription renvoyée dans WhatsApp, puis résumé ou question ciblée |
 | Information manquante | Omettre la date | Question sur la date, pas d’accord incomplet enregistré |
 | Annulation | Annuler un brouillon | Aucun nouvel accord sauvegardé |
 | Isolement | Utiliser deux testeurs autorisés | Chacun consulte uniquement ses propres accords |
@@ -37,17 +39,26 @@ Ouvrir la conversation avec le numéro de test depuis WhatsApp Desktop ou WhatsA
 
 Dans WhatsApp Web, autoriser le microphone pour le site si nécessaire. Si le vocal a été envoyé mais aucune transcription ne revient, vérifier d’abord les journaux serveur, la réception du webhook, puis l’accès aux API. Ne pas copier de tokens dans un ticket ou une capture.
 
-### Journal de recette
+### Tests réels Gemini réalisés le 10 octobre 2026
 
-À compléter après exécution réelle, sans déclarer un succès sur la seule base de tests simulés :
+Deux appels indépendants au fournisseur ont été validés avec `gemini-3.8-flash` :
+
+- **Transcription** : un WAV français synthétisé localement a été envoyé à Gemini. Le texte complet a été correctement restitué : « Ceci est un test. J’ai vendu deux sacs de riz à Awa pour 30 000 francs CFA. Elle a payé 10 000 francs. Le reste est prévu le 20 octobre 2026. »
+- **Extraction** : un autre exemple d’accord a produit les cinq champs attendus. Pour un total de 25 000 F CFA et une avance de 10 000 F CFA, le code a calculé un solde de 15 000 F CFA.
+
+Ces appels valident l’intégration Gemini ; l’audio de transcription ne provenait pas de WhatsApp. Les 66 tests automatisés complètent ces vérifications avec des fournisseurs simulés. Le webhook Meta est désormais vérifié et abonné aux messages ; les requêtes entrantes obtiennent HTTP 200. Le serveur Fly.io répond également HTTP 200 sur `/healthz`. Les résultats de la recette WhatsApp sont détaillés ci-dessous.
+
+### Journal de recette WhatsApp
+
+Vérifications réalisées dans WhatsApp sur PC ; les cas en attente ne sont pas déclarés réussis sur la seule base des tests simulés :
 
 | Cas | Date | Résultat constaté |
 | --- | --- | --- |
-| Réponse au menu | — | Non exécuté |
-| Accord texte confirmé | — | Non exécuté |
-| Vocal français transcrit et affiché | — | Non exécuté |
-| Correction avant validation | — | Non exécuté |
-| Persistance après redémarrage | — | Non exécuté |
+| Réponse au menu | 2026-10-10 | Validé : menu reçu dans WhatsApp sur PC |
+| Accord texte confirmé | 2026-10-10 | Validé : Awa, deux sacs de riz, total 30 000 F CFA, avance 10 000 F CFA, échéance 2026-10-20 ; solde affiché 20 000 F CFA. Après correction et clic sur Enregistrer, référence WT-B189648F créée |
+| Vocal français transcrit et affiché | 2026-10-10 | Validé : vocal de deux secondes transmis dans la conversation de test, consentement accepté, transcription française correcte renvoyée sur WhatsApp. Contenu personnel non reproduit |
+| Correction avant validation | 2026-10-10 | Validé : avance corrigée à 12 000 F CFA, solde recalculé à 18 000 F CFA |
+| Persistance après redémarrage | 2026-10-10 | Validé depuis WhatsApp sur PC après déploiement et redémarrage : Mes accords restitue WT-B189648F, Awa, deux sacs de riz, total 30 000, avance 12 000, reste 18 000 F CFA, échéance 2026-10-20 ; santé serveur HTTP 200 |
 
 ## Diagnostic rapide
 
@@ -55,7 +66,7 @@ Dans WhatsApp Web, autoriser le microphone pour le site si nécessaire. Si le vo
 - **POST refusé** : contrôler le secret d’application et l’en-tête signé envoyé par Meta. Ne pas désactiver la vérification de signature.
 - **Aucune réaction** : contrôler l’abonnement `messages`, le numéro expéditeur autorisé, le serveur et le tunnel.
 - **Envoi refusé** : contrôler le token, l’identifiant du numéro et le destinataire de test. Reprendre la conversation en envoyant un message depuis le téléphone pour tester une réponse au message entrant.
-- **Transcription refusée** : contrôler l’accès OpenAI au modèle configuré, le type et la taille de l’audio. Réessayer avec un vocal court.
+- **Transcription refusée** : contrôler l’accès Google Gemini au modèle configuré, les quotas, le type et la taille de l’audio (14 000 000 octets maximum). Réessayer avec un vocal court.
 - **HTTP sain mais bot silencieux** : `/healthz` ne teste pas les fournisseurs ; examiner les erreurs du worker sans publier les données des utilisateurs.
 
 La V1 répond aux messages entrants. Elle ne fournit pas de campagne sortante ni de relance automatique. Le passage au vrai numéro professionnel, les autorisations Meta, la facturation et un hébergement permanent constituent une étape distincte.

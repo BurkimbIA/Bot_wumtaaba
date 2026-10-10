@@ -6,8 +6,8 @@ flowchart LR
     M -->|Webhook signé| A[FastAPI · /webhook]
     A --> Q[File durable · SQLite]
     Q --> W[Worker intégré]
-    W -->|Texte ou transcription| E[Extraction des champs]
-    W -->|Audio téléchargé depuis Meta| O[OpenAI · transcription française]
+    W -->|Texte ou transcription| E[Google Gemini · extraction des champs]
+    W -->|Audio téléchargé depuis Meta| O[Google Gemini · transcription française]
     O --> E
     E --> V[Validation déterministe]
     V -->|Résumé à confirmer| M
@@ -18,6 +18,8 @@ flowchart LR
 ## Un seul parcours
 
 Le menu propose nouvel accord, consultation et aide. Un vocal suit le même parcours qu’un texte après transcription. Les valeurs sont proposées dans un brouillon ; elles ne deviennent un accord qu’après confirmation du commerçant. Le calcul du reste et la validation des montants sont déterministes.
+
+Les audios sont téléchargés depuis Meta après consentement, vérifiés puis transmis en mémoire à Gemini sous forme de données intégrées encodées en base64. La limite de 14 000 000 octets laisse de la place à cet encodage et au texte de la requête. Les fichiers audio bruts ne sont pas conservés sur disque. La transcription est demandée en français et renvoyée sur WhatsApp ; l’extraction utilise une réponse JSON structurée.
 
 ## Frontières de confiance
 

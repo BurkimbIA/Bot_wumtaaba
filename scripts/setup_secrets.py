@@ -10,7 +10,7 @@ path = Path(".env")
 if not path.exists():
     path.write_text(Path(".env.example").read_text())
 os.chmod(path, 0o600)
-for key in ("WHATSAPP_TOKEN", "META_APP_SECRET", "OPENAI_API_KEY"):
+for key in ("WHATSAPP_TOKEN", "META_APP_SECRET", "GEMINI_API_KEY"):
     value = getpass(f"{key} (Entrée pour conserver) : ").strip()
     if value:
         set_key(str(path), key, value)

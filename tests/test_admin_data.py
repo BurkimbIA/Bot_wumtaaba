@@ -119,3 +119,47 @@ def test_all_queries_are_read_only(store):
 def test_activity_uses_recent_period(store):
     store.enqueue("old", PHONE, {"type": "text", "timestamp": time.time() - 30 * 86400})
     assert admin_data.overview(store)["activity"] == []
+
+
+def test_seller_groups_and_details_do_not_mix_shared_clients(store):
+    seed(store)
+    other = '22672222222'
+    store.enqueue('other', other, {'type':'text'})
+    store.claim_inbox()
+    store.finish_inbox('other', other, {}, [], {
+        'id':'beef1234-002', 'client':'Awa', 'client_phone':'22671111111',
+        'product':'Riz', 'total':5000, 'paid':1000, 'due_date':'2099-01-01',
+    })
+    groups = admin_data.agreement_sellers(store)
+    assert groups['total'] == 2
+    by_sender = {row['sender']:row for row in groups['items']}
+    assert by_sender[PHONE]['balance'] == 900
+    assert by_sender[other]['balance'] == 4000
+    assert admin_data.agreement_sellers(store, 'Awa')['total'] == 2
+    assert admin_data.agreement_sellers(store, other)['total'] == 1
+    assert admin_data.agreement_sellers(store, "' OR 1=1 --")['total'] == 0
+    detail = admin_data.agreements(store, 'Awa', sender=PHONE)
+    assert detail['total'] == 1 and detail['items'][0]['sender'] == PHONE
+    assert admin_data.agreements(store, sender="' OR 1=1 --")['total'] == 0
+    store.settle_agreement(other, 'WT-BEEF1234')
+    assert admin_data.agreement_sellers(store, other)['items'][0]['balance'] == 0
+
+
+def test_seller_totals_cover_all_agreement_pages(store):
+    for i in range(28):
+        mid=f'group-{i}'
+        store.enqueue(mid,PHONE,{'type':'text'})
+        store.claim_inbox()
+        store.finish_inbox(mid,PHONE,{},[],{
+            'id':f'{i:08x}-group','client':'Awa','product':'Riz',
+            'total':1000,'paid':100,'due_date':'2099-01-01',
+        })
+    groups=admin_data.agreement_sellers(store)
+    assert groups['total'] == 1
+    assert groups['items'][0]['agreement_count'] == 28
+    assert groups['items'][0]['total_amount'] == 28000
+    assert groups['items'][0]['balance'] == 25200
+    first=admin_data.agreements(store,sender=PHONE)
+    second=admin_data.agreements(store,sender=PHONE,page=2)
+    assert len(first['items']) == 25 and len(second['items']) == 3
+    assert not {r['id'] for r in first['items']} & {r['id'] for r in second['items']}

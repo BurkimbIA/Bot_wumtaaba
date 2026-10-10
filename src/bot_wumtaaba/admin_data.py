@@ -50,15 +50,31 @@ def overview(store):
     return {"counts": counts, "activity": activity, "recent": recent}
 
 
-def agreements(store, q="", page=1):
+def agreements(store, q="", page=1, sender=""):
     where = " WHERE a.reference LIKE ? ESCAPE '\\' OR a.client_name LIKE ? ESCAPE '\\' OR a.client_phone LIKE ? ESCAPE '\\' OR a.sender LIKE ? ESCAPE '\\'"
     params = (_search(q),) * 4
+    if sender:
+        where = " WHERE (" + where.removeprefix(" WHERE ") + ") AND a.sender=?"
+        params += (sender,)
     return _page(store,
                  "SELECT a.id,a.reference,a.client_name,a.client_phone,a.sender,a.total,a.paid,a.due_date,"
                  "COALESCE(e.status,CASE WHEN a.paid>=a.total THEN 'paid' ELSE 'open' END) status "
                  "FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id" + where +
                  " ORDER BY a.created_at DESC,a.id DESC",
                  "SELECT COUNT(*) FROM agreements a" + where, params, page)
+
+
+def agreement_sellers(store, q="", page=1):
+    """Paginate sellers before loading their agreements, never split a seller group."""
+    where = " WHERE a.reference LIKE ? ESCAPE '\\' OR a.client_name LIKE ? ESCAPE '\\' OR a.client_phone LIKE ? ESCAPE '\\' OR a.sender LIKE ? ESCAPE '\\'"
+    return _page(store,
+                 "SELECT a.sender,COUNT(*) agreement_count,COALESCE(SUM(a.total),0) total_amount,"
+                 "COALESCE(SUM(CASE WHEN COALESCE(e.status,'open')='open' "
+                 "THEN MAX(COALESCE(a.total,0)-COALESCE(a.paid,0),0) ELSE 0 END),0) balance "
+                 "FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id" + where +
+                 " GROUP BY a.sender ORDER BY MAX(a.created_at) DESC,a.sender",
+                 "SELECT COUNT(DISTINCT a.sender) FROM agreements a" + where,
+                 (_search(q),) * 4, page)
 
 
 def conversations(store, q="", page=1):

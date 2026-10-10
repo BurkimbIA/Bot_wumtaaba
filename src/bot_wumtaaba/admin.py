@@ -103,9 +103,14 @@ def install_admin(app, settings):
         return admin_data.overview(request.app.state.store)
 
     @router.get("/api/agreements")
-    async def agreements(request: Request, q: str = "", page: int = 1):
+    async def agreements(request: Request, q: str = "", page: int = 1, sender: str = ""):
         authorized(request)
-        return admin_data.agreements(request.app.state.store, q[:100], max(1, page))
+        return admin_data.agreements(request.app.state.store, q[:100], max(1, page), sender[:30])
+
+    @router.get("/api/agreement-sellers")
+    async def agreement_sellers(request: Request, q: str = "", page: int = 1):
+        authorized(request)
+        return admin_data.agreement_sellers(request.app.state.store, q[:100], max(1, page))
 
     @router.get("/api/conversations")
     async def conversations(request: Request, q: str = "", page: int = 1):

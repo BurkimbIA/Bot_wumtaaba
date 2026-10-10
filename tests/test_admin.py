@@ -15,7 +15,7 @@ def config(tmp_path, **extra):
 def test_admin_private_session_logout_and_headers(tmp_path):
     settings = config(tmp_path)
     with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
-        for endpoint in ('overview', 'agreements', 'conversations', 'reminders', 'media/in:abc'):
+        for endpoint in ('overview', 'agreements', 'agreement-sellers', 'conversations', 'reminders', 'media/in:abc'):
             assert client.get('/admin/api/'+endpoint).status_code == 401
         assert client.post('/admin/login', json={'password':'wrong'}).status_code == 401
         response = client.post('/admin/login', json={'password':settings.admin_password.get_secret_value()})

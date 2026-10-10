@@ -5,7 +5,7 @@ Le back-office est disponible à `/admin` sur le même service Fly.io. Il utilis
 Quatre vues :
 
 - Vue d’ensemble : contacts, accords en cours, solde à suivre, rappels en attente et activité récente.
-- Accords et échéances : recherche par client, référence ou téléphone ; montant, solde et état.
+- Accords et échéances : groupes par numéro de téléphone du vendeur, avec nombre d’accords, montant total et solde à suivre. Ouvrir un vendeur affiche ses accords paginés. Recherche par vendeur, client ou référence ; les totaux portent alors sur les accords correspondant à la recherche.
 - Conversations : recherche par numéro, historique des 200 derniers messages, transcription et lecture des fichiers audio conservés.
 - Rappels : destinataires, dates, rôles et filtre par état, notamment consentement requis et blocage de modèle Meta.
 

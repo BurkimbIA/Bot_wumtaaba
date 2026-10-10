@@ -182,7 +182,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.3.0",
+        version="0.3.1",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -194,7 +194,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.3.0"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.3.1"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):

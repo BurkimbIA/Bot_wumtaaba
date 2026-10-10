@@ -1,5 +1,6 @@
 """Parcours WhatsApp courts, avec validation explicite avant sauvegarde."""
 
+import re
 from copy import deepcopy
 from uuid import uuid4
 
@@ -7,6 +8,7 @@ import httpx
 
 from .clients import MediaError
 from .domain import Draft, buttons, chunks, menu, text
+from .media import archive_audio
 
 
 class Conversation:
@@ -22,8 +24,58 @@ class Conversation:
         body = message.get("text", {}).get("body", "").strip() if kind == "text" else ""
         action = message.get("interactive", {}).get("button_reply", {}).get("id", "")
         command = body.casefold()
+        customer_only = sender not in self.settings.senders and self.store.is_known_customer(sender)
+        customer_help = text(
+            "Tu peux envoyer un vocal à transcrire. Pour autoriser les rappels, "
+            "envoie ACCEPTER WT-référence ; pour les retirer : REFUSER WT-référence. "
+            "STOP désactive tous les rappels pour ton numéro ; « rappels oui » les réactive. "
+            "Après STOP, confirme aussi chaque référence avec ACCEPTER."
+        )
+        if customer_only:
+            # A merchant draft from an earlier role must never permit customer-side creation.
+            state = {"pending_audio": state["pending_audio"]} if "pending_audio" in state else {}
         if command == "stop":
-            return {}, [text("Conversation arrêtée. Écris « menu » pour reprendre.")], None
+            self.store.set_reminders_enabled(sender, False)
+            return {}, [text("Conversation arrêtée et rappels désactivés pour ton numéro. "
+                             + ("Pour reprendre : « rappels oui », puis ACCEPTER suivi de chaque référence."
+                                if customer_only else
+                                "Écris « menu » pour reprendre, ou « rappels oui » pour "
+                                "réactiver tes rappels commerçant."))], None
+        if command == "rappels oui" and (sender in self.settings.senders or customer_only):
+            self.store.set_reminders_enabled(sender, True)
+            return state, [text("Rappels réactivés pour ton numéro. Pour un accord où tu es client, "
+                                "envoie aussi ACCEPTER suivi de sa référence.")], None
+        consent = re.fullmatch(r"(accepter|refuser)\s+(?:wt-)?([a-f0-9]{8})", command)
+        if consent:
+            granted = consent[1] == "accepter"
+            matched = self.store.set_customer_consent(sender, "WT-" + consent[2].upper(), granted)
+            reply = (
+                ("Consentement enregistré pour cette référence. Si tu as envoyé STOP, "
+                 "envoie aussi « rappels oui » pour réactiver ton numéro. "
+                 "REFUSER suivi de la référence retire ce consentement.")
+                if granted else "Rappels refusés pour cette référence."
+            ) if matched else "Référence introuvable pour ton numéro. Vérifie avec le commerçant."
+            if matched and granted and not self.store.reminders_enabled(sender):
+                reply = ("Consentement enregistré, mais tes rappels restent désactivés après STOP. "
+                         "Envoie « rappels oui » pour réactiver ton numéro.")
+            return state, [text(reply)], None
+        if customer_only and kind != "audio" and not action.startswith(("audio:", "refuse:")):
+            return {}, [customer_help], None
+        settled = re.fullmatch(r"(?:regle|réglé|paye|payé)\s+(?:wt-)?([a-f0-9]{8})", command)
+        if settled:
+            matched = self.store.settle_agreement(sender, "WT-" + settled[1].upper())
+            return state, [text("Accord marqué réglé et rappels annulés. Le montant de "
+                                "l’avance d’origine reste conservé dans l’historique."
+                                if matched else "Aucun accord correspondant dans ton carnet.")], None
+        if command == "calendrier":
+            records = self.store.calendar_for(sender)
+            lines = ["*Ton calendrier d’échéances*"]
+            for record in records:
+                lines.append(f"{record['due_date']} — {record['client']} — "
+                             f"WT-{record['id'][:8].upper()} — {record.get('status', 'prévu')}")
+            if not records:
+                lines.append("Aucune échéance à venir.")
+            return state, chunks("\n".join(lines)), None
         if command in {"menu", "annuler", "bonjour", "salut"}:
             return (
                 {},
@@ -42,7 +94,8 @@ class Conversation:
                 [
                     text(
                         "Décris l’accord en un message ou un vocal : client, produit, prix total, "
-                        "avance et date prévue. Exemple : Awa, 2 sacs de riz, 30 000 F, "
+                        "avance et date prévue. Tu peux ajouter le numéro international du client "
+                        "avec son indicatif (optionnel). Exemple : Awa, 2 sacs de riz, 30 000 F, "
                         "10 000 F payés, solde le 20 décembre 2026.\n\n"
                         "Le texte est analysé par Google Gemini pour préparer le résumé. "
                         "Vérifie-le avant d’enregistrer. Écris « annuler » pour quitter."
@@ -57,13 +110,16 @@ class Conversation:
                     text(
                         "1 — Nouvel accord : décris ta vente puis vérifie et confirme le résumé.\n"
                         "2 — Mes accords : consulte tes accords enregistrés.\n"
+                        "« calendrier » : échéances à venir.\n"
+                        "« réglé WT-référence » : clôturer un accord et annuler ses rappels.\n"
+                        "« STOP » : désactiver tes rappels ; « rappels oui » : les réactiver.\n"
                         "« menu » ou « annuler » : abandonner le brouillon.\n\n"
                         "Les accords sont des notes personnelles, pas une validation du client. "
                         "Les textes sont analysés par Google Gemini. Chaque vocal demande ton accord avant "
-                        "téléchargement et transcription via Google Gemini. "
-                        f"Pilote : accords et messages supprimés automatiquement après "
-                        f"{self.settings.retention_days} jours. "
-                        f"Assistance : {self.settings.support_contact}."
+                        "téléchargement, conservation privée et transcription via Google Gemini. "
+                        + (f"Historique conservé {self.settings.retention_days} jours. "
+                           if self.settings.retention_days else "Historique conservé sans purge automatique. ")
+                        + f"Assistance : {self.settings.support_contact}."
                     ),
                     menu(),
                 ],
@@ -103,7 +159,12 @@ class Conversation:
             agreement = {"id": token, **draft.model_dump(mode="json")}
             return (
                 {},
-                [text("✅ Accord enregistré. Réf. WT-" + token[:8].upper()), menu()],
+                [text("✅ Accord enregistré. Réf. WT-" + token[:8].upper()
+                      + "\nÉchéance ajoutée au calendrier. Les rappels aux deux numéros "
+                        "seront activés seulement après accord du client."
+                      + ("\nDemande au client d’envoyer depuis son numéro : ACCEPTER WT-"
+                         + token[:8].upper() + " à ce bot." if draft.client_phone else
+                         "\nSans numéro client, aucun rappel n’est envoyé.")), menu()],
                 agreement,
             )
         if kind == "audio":
@@ -116,14 +177,15 @@ class Conversation:
                 )
             token = uuid4().hex
             state.pop("confirmation", None)
-            state["pending_audio"] = {"id": media_id, "token": token}
+            state["pending_audio"] = {"id": media_id, "token": token, "message_id": message.get("id") or token}
             return (
                 state,
                 [
                     buttons(
                         "Pour ce vocal, autorises-tu Wuumtaaba à le télécharger depuis Meta et à "
                         "le transmettre à Google Gemini pour une transcription en français ? Le fichier "
-                        "n’est pas conservé sur notre serveur. Le texte sera affiché ici.",
+                        "sera conservé en privé avec sa transcription dans ton historique. "
+                        "Le texte sera affiché ici.",
                         [(f"audio:{token}", "Accepter"), (f"refuse:{token}", "Refuser")],
                     )
                 ],
@@ -138,20 +200,30 @@ class Conversation:
                 state.pop("pending_audio", None)
                 return (
                     state,
-                    [text("Vocal non traité. Tu peux écrire ton accord ou envoyer « menu ».")],
+                    [text("Vocal non traité. Tu peux envoyer un autre message.")],
                     None,
                 )
             try:
                 audio = await self.whatsapp.audio(pending["id"])
+                metadata = archive_audio(self.settings.media_directory, pending["message_id"],
+                                         audio[0], audio[2])
+                metadata["media_id"] = pending["id"]
+                self.store.record_media(pending["message_id"], metadata=metadata)
                 transcript = await self.intelligence.transcribe(*audio)
-            except MediaError as error:
+                self.store.record_media(pending["message_id"],
+                                        metadata={"status": "transcribed"}, transcript=transcript)
+            except (MediaError, ValueError, httpx.HTTPError, OSError) as error:
+                self.store.record_media(pending["message_id"], metadata={
+                    "media_id": pending["id"], "status": "failed", "error": type(error).__name__
+                })
                 state.pop("pending_audio", None)
-                return state, [text(str(error))], None
+                return state, [text(str(error) if isinstance(error, MediaError) else
+                                    "Impossible de traiter ce vocal. Renvoie-le pour réessayer.")], None
             state.pop("pending_audio", None)
             prefix = chunks("🎙️ *Transcription française*\n" + transcript)
             # Une transcription seule est utile sans forcer la création d'un accord.
             if state.get("mode") != "draft":
-                return state, prefix + [menu()], None
+                return state, prefix + [customer_help if customer_only else menu()], None
             return await self._extract(transcript, state, prefix)
         if body and state.get("mode") == "draft":
             state.pop("pending_audio", None)

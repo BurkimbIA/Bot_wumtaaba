@@ -52,7 +52,7 @@ fly logs --app bot-wumtaaba
 fly checks list --app bot-wumtaaba
 ```
 
-Les accords vivent sur le volume, pas dans l’image. Ne pas supprimer le volume lors d’une mise à jour et ne pas augmenter le nombre de machines sans revoir le stockage et le worker. Prévoir une sauvegarde SQLite cohérente avant toute utilisation durable ; la conservation pilote reste de 30 jours par défaut.
+Les accords vivent sur le volume, pas dans l’image. Ne pas supprimer le volume lors d’une mise à jour et ne pas augmenter le nombre de machines sans revoir le stockage et le worker. Prévoir une sauvegarde SQLite cohérente avant toute utilisation durable ; `RETENTION_DAYS=0` désactive la purge automatique. Sauvegarder également `/app/data/media`. La migration V2 produit une copie SQLite préalable `.pre-v2.sqlite3` ; elle ne remplace pas une sauvegarde régulière externe.
 
 ## Renouvellement du token Meta
 

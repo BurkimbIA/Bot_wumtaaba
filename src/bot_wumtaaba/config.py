@@ -18,7 +18,11 @@ class Settings(BaseSettings):
     allowed_senders: str = ""
     max_audio_bytes: int = Field(default=14_000_000, ge=1024, le=14_000_000)
     max_messages_per_hour: int = Field(default=30, ge=1)
-    retention_days: int = Field(default=30, ge=1)
+    retention_days: int = Field(default=0, ge=0)
+    media_directory: Path = Path("data/media")
+    reminder_enabled: bool = True
+    reminder_template_name: str = ""
+    reminder_template_language: str = "fr"
     support_contact: str = "L’équipe Wuumtaaba"
 
     @property

@@ -9,10 +9,20 @@ from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 class Draft(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     client: str | None = Field(default=None, max_length=100)
+    client_phone: str | None = None
     product: str | None = Field(default=None, max_length=200)
     total: StrictInt | None = Field(default=None, ge=1, le=1_000_000_000)
     paid: StrictInt | None = Field(default=None, ge=0, le=1_000_000_000)
     due_date: date | None = None
+
+    @field_validator("client_phone", mode="before")
+    @classmethod
+    def international_phone(cls, value):
+        if value is None:
+            return None
+        if not isinstance(value, str) or not re.fullmatch(r"\+?[1-9]\d{7,14}", value.strip()):
+            raise ValueError("Numéro international requis, indicatif compris, sans espaces")
+        return value.strip().lstrip("+")
 
     @field_validator("due_date", mode="before")
     @classmethod
@@ -44,6 +54,7 @@ class Draft(BaseModel):
         money = lambda n: f"{n:,}".replace(",", " ") + " F CFA"
         return (
             f"*Accord à vérifier*\nClient : {self.client}\nProduit : {self.product}\n"
+            f"Téléphone client : {self.client_phone or 'non renseigné'}\n"
             f"Prix : {money(self.total)}\nDéjà payé : {money(self.paid)}\n"
             f"*Reste : {money(self.total - self.paid)}*\n"
             f"Date prévue : {self.due_date.strftime('%d/%m/%Y')}\n\n"

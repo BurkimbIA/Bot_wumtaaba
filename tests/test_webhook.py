@@ -183,3 +183,47 @@ def test_outbox_expiry_based_on_whatsapp_timestamp(tmp_path):
     store.finish_inbox("id", "user", {}, [{"type": "text"}])
     assert store.claim_outbox()["created_at"] == original_time
     store.close()
+
+
+def test_v2_archives_ignored_and_delivery_callbacks(settings):
+    with TestClient(create_app(settings, run_worker=False)) as client:
+        post(client, payload(sender="22670000099", msg_id="unknown"))
+        store = client.app.state.store
+        row = store.db.execute("SELECT status,text FROM messages WHERE id='in:unknown'").fetchone()
+        assert tuple(row) == ("ignored", "menu")
+        data = payload()
+        value = data["entry"][0]["changes"][0]["value"]
+        value.pop("messages")
+        value["statuses"] = [{"id": "out-remote", "status": "delivered", "timestamp": str(int(time.time()))}]
+        assert post(client, data).status_code == 200
+        assert post(client, data).status_code == 200
+        assert store.db.execute("SELECT COUNT(*) FROM delivery_events").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("command", ["STOP", "REFUSER WT-ABC"])
+def test_optout_not_lost_to_hourly_limit(settings, command):
+    settings.max_messages_per_hour = 1
+    with TestClient(create_app(settings, run_worker=False)) as client:
+        post(client, payload(msg_id="first"))
+        data = payload(msg_id="opt-out")
+        data["entry"][0]["changes"][0]["value"]["messages"][0]["text"]["body"] = command
+        post(client, data)
+        assert client.app.state.store.db.execute(
+            "SELECT status FROM inbox WHERE id='opt-out'"
+        ).fetchone()[0] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_global_disabled_blocks_already_queued_reminder(tmp_path, settings):
+    store = Store(tmp_path / "disabled.sqlite3")
+    store.enqueue("request", "22670000000", {"type": "text"})
+    store.claim_inbox()
+    store.finish_inbox("request", "22670000000", {}, [{"type": "text", "text": {"body": "rappel"}}])
+    with store.db:
+        store.db.execute("UPDATE outbox SET category='reminder'")
+    settings.reminder_enabled = False
+    whatsapp = AsyncMock()
+    await process_once(store, AsyncMock(), whatsapp, settings=settings)
+    whatsapp.send.assert_not_awaited()
+    assert store.db.execute("SELECT status FROM outbox").fetchone()[0] == "failed"
+    store.close()

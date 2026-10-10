@@ -16,6 +16,7 @@ from .clients import Intelligence, MediaError, WhatsApp
 from .config import Settings
 from .conversation import Conversation
 from .domain import text
+from .reminders import can_send_outbox, queue_due_reminders
 from .store import Store
 
 logger = logging.getLogger("wuumtaaba")
@@ -27,7 +28,7 @@ def signature_valid(body: bytes, signature: str, secret: str) -> bool:
     return bool(secret) and hmac.compare_digest(expected, signature)
 
 
-def incoming_messages(payload: dict, phone_id: str):
+def incoming_values(payload: dict, phone_id: str):
     if payload.get("object") != "whatsapp_business_account":
         return
     for entry in payload.get("entry", []):
@@ -37,21 +38,31 @@ def incoming_messages(payload: dict, phone_id: str):
             value = change.get("value", {})
             if value.get("metadata", {}).get("phone_number_id") != phone_id:
                 continue
-            for message in value.get("messages", []):
-                # Ne pas stocker contacts, jetons, URLs de médias ou événements de statut.
-                if not isinstance(message, dict):
-                    continue
-                minimal = {
-                    key: message[key]
-                    for key in ("id", "from", "timestamp", "type", "text", "interactive", "button")
-                    if key in message
-                }
-                if message.get("type") == "audio":
-                    minimal["audio"] = {"id": message.get("audio", {}).get("id", "")}
-                yield minimal
+            yield value
 
 
-async def process_once(store, conversation, whatsapp):
+def incoming_messages(payload: dict, phone_id: str):
+    for value in incoming_values(payload, phone_id):
+        for message in value.get("messages", []):
+            # Conserver les contenus utiles, pas les URLs temporaires des médias.
+            if not isinstance(message, dict):
+                continue
+            minimal = {
+                key: message[key]
+                for key in ("id", "from", "timestamp", "type", "text", "interactive", "button",
+                            "context", "reaction", "location", "contacts", "errors")
+                if key in message
+            }
+            for kind in ("audio", "image", "video", "document", "sticker"):
+                media = message.get(kind)
+                if isinstance(media, dict):
+                    minimal[kind] = {k: media[k] for k in (
+                        "id", "mime_type", "sha256", "voice", "caption", "filename"
+                    ) if k in media}
+            yield minimal
+
+
+async def process_once(store, conversation, whatsapp, *, settings=None):
     """Les erreurs d'envoi ambiguës ne sont pas réessayées automatiquement."""
     job = store.claim_inbox()
     if job and time.time() - int(job["message"].get("timestamp", job["created_at"])) > 23 * 3600:
@@ -97,7 +108,13 @@ async def process_once(store, conversation, whatsapp):
             else:
                 store.retry_inbox(job["id"], type(exc).__name__)
     outgoing = store.claim_outbox()
-    if outgoing and time.time() - outgoing["created_at"] > 23 * 3600:
+    if outgoing and outgoing.get("category") == "reminder" and (
+            (settings is not None and not settings.reminder_enabled)
+            or not can_send_outbox(store, outgoing)):
+        store.fail_outbox(outgoing["id"], "reminder_not_authorized")
+        outgoing = None
+    if (outgoing and outgoing.get("category") != "reminder"
+            and time.time() - outgoing["created_at"] > 23 * 3600):
         store.fail_outbox(outgoing["id"], "expired")
         outgoing = None
     if outgoing:
@@ -133,12 +150,16 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
             async def worker():
                 last_purge = time.monotonic()
+                last_schedule = 0
                 while True:
                     try:
                         if time.monotonic() - last_purge > 3600:
                             store.purge(settings.retention_days)
                             last_purge = time.monotonic()
-                        busy = await process_once(store, conversation, whatsapp)
+                        if time.monotonic() - last_schedule > 30:
+                            queue_due_reminders(store, settings)
+                            last_schedule = time.monotonic()
+                        busy = await process_once(store, conversation, whatsapp, settings=settings)
                         if not busy:
                             await asyncio.sleep(0.5)
                     except asyncio.CancelledError:
@@ -160,7 +181,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -172,7 +193,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.1.0"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.2.0"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):
@@ -201,20 +222,34 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
             if not isinstance(payload, dict):
                 raise TypeError()
             messages = list(incoming_messages(payload, settings.whatsapp_phone_number_id))
+            statuses = [status for value in incoming_values(payload, settings.whatsapp_phone_number_id)
+                        for status in value.get("statuses", []) if isinstance(status, dict)]
         except (ValueError, TypeError, AttributeError):
             raise HTTPException(400, "Invalid payload") from None
         store = app.state.store
+        for status in statuses:
+            store.record_delivery_status(status)
         for message in messages:
             sender, message_id = message.get("from", ""), message.get("id", "")
-            if sender not in settings.senders or not isinstance(message_id, str) or not message_id:
+            if (not isinstance(sender, str) or not sender.isdigit()
+                    or not isinstance(message_id, str) or not message_id):
+                continue
+            if sender not in settings.senders and not store.is_known_customer(sender):
+                store.archive_message(message, status="ignored", reason="not_registered")
                 continue
             try:
                 age = time.time() - int(message.get("timestamp", 0))
             except (ValueError, TypeError):
+                store.archive_message(message, status="ignored", reason="invalid_timestamp")
                 continue
             if not 0 <= age < 23 * 3600:
+                store.archive_message(message, status="ignored", reason="expired")
                 continue
-            if store.count_recent(sender) >= settings.max_messages_per_hour:
+            body = message.get("text", {}).get("body", "")
+            command = body.strip().casefold() if isinstance(body, str) else ""
+            opt_out = command == "stop" or command.startswith("refuser ")
+            if not opt_out and store.count_recent(sender) >= settings.max_messages_per_hour:
+                store.archive_message(message, status="ignored", reason="rate_limited")
                 continue
             store.enqueue(message_id, sender, message)
         # Accuser réception seulement après écriture durable en SQLite.

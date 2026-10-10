@@ -1,4 +1,4 @@
-# Architecture V1
+# Architecture du bot
 
 ```mermaid
 flowchart LR
@@ -19,12 +19,12 @@ flowchart LR
 
 Le menu propose nouvel accord, consultation et aide. Un vocal suit le même parcours qu’un texte après transcription. Les valeurs sont proposées dans un brouillon ; elles ne deviennent un accord qu’après confirmation du commerçant. Le calcul du reste et la validation des montants sont déterministes.
 
-Les audios sont téléchargés depuis Meta après consentement, vérifiés puis transmis en mémoire à Gemini sous forme de données intégrées encodées en base64. La limite de 14 000 000 octets laisse de la place à cet encodage et au texte de la requête. Les fichiers audio bruts ne sont pas conservés sur disque. La transcription est demandée en français et renvoyée sur WhatsApp ; l’extraction utilise une réponse JSON structurée.
+Les audios sont téléchargés depuis Meta après consentement, vérifiés puis transmis en mémoire à Gemini sous forme de données intégrées encodées en base64. La limite de 14 000 000 octets laisse de la place à cet encodage et au texte de la requête. Les fichiers audio sont conservés en privé sous `MEDIA_DIRECTORY`, avec permissions 0600 ; les métadonnées et transcriptions sont reliées dans SQLite. La transcription est demandée en français et renvoyée sur WhatsApp ; l’extraction utilise une réponse JSON structurée.
 
 ## Frontières de confiance
 
 - Meta est contrôlé par signature du corps HTTP avant traitement. Le secret de validation GET protège uniquement l’enregistrement initial du webhook.
-- La liste `ALLOWED_SENDERS` ferme le pilote aux autres expéditeurs. La séparation des accords s’appuie sur l’expéditeur WhatsApp.
+- La liste `ALLOWED_SENDERS` autorise les commerçants ; les clients référencés peuvent gérer leur consentement et leurs vocaux, sans accéder aux actions du commerçant. La séparation des accords s’appuie sur l’expéditeur WhatsApp.
 - Les sorties du modèle restent des données à valider. Une transcription n’est pas une validation du commerçant.
 - Les tokens restent dans l’environnement. Les secrets, bases SQLite et enregistrements audio n’entrent pas dans le dépôt ni dans l’image Docker.
 
@@ -41,3 +41,5 @@ Sauvegarder la base avec l’API de sauvegarde SQLite ou arrêter proprement le 
 ## Validation
 
 Les tests automatisés isolent les fournisseurs. Ils doivent couvrir le webhook signé, les doublons, les brouillons incomplets, les montants, les confirmations, la séparation par expéditeur et les erreurs audio. La recette dans [SETUP_META.md](SETUP_META.md) valide ensuite le réseau, les autorisations Meta, la transcription et l’affichage réel sur WhatsApp.
+
+Le [schéma SQLite V2](DATABASE.md) décrit le journal des interactions, les échéances et les rappels conditionnés au consentement.

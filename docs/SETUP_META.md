@@ -70,3 +70,13 @@ Vérifications réalisées dans WhatsApp sur PC ; les cas en attente ne sont pas
 - **HTTP sain mais bot silencieux** : `/healthz` ne teste pas les fournisseurs ; examiner les erreurs du worker sans publier les données des utilisateurs.
 
 La V1 répond aux messages entrants. Elle ne fournit pas de campagne sortante ni de relance automatique. Le passage au vrai numéro professionnel, les autorisations Meta, la facturation et un hébergement permanent constituent une étape distincte.
+
+## Recette SQLite V2 — 10 octobre 2026
+
+- Suite automatisée : 134 tests réussis ; Ruff réussi.
+- Fly.io : version 0.2.0, contrôle de santé HTTP 200, migration 2 et intégrité SQLite `ok`, sauvegarde préalable présente.
+- WhatsApp PC : `calendrier` restitue l’échéance de l’accord conservé après migration.
+- Nouveau vocal : consentement affichant la conservation privée, transcription revenue dans WhatsApp, fichier de 7 302 octets présent sur le volume en permissions 0600 et transcription reliée en base.
+- Accusés Meta `sent`, `delivered`, `read` reçus et archivés.
+- Rappels de l’accord historique en attente de consentement, aucun envoi indu. Les scénarios à deux destinataires sont testés automatiquement, pas encore validés avec deux téléphones réels.
+- Modèle `wuumtaaba_rappel_echeance_v1` soumis à Meta en français, statut `PENDING` au dernier contrôle. Son activation hors fenêtre reste à effectuer après approbation.

@@ -1,0 +1,20 @@
+{
+  "name": "wuumtaaba_rappel_echeance_v1",
+  "language": "fr",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Rappel pour l’accord {{1}} : solde {{2}} F CFA, échéance {{3}}. Si cet accord est déjà réglé, informez le commerçant. Envoyez STOP pour arrêter les rappels.",
+      "example": {
+        "body_text": [
+          [
+            "WT-ABC12345",
+            "18 000",
+            "20/10/2026"
+          ]
+        ]
+      }
+    }
+  ]
+}

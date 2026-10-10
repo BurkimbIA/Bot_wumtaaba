@@ -2,7 +2,7 @@
 
 Une V1 simple : écrire ou dicter un accord en français, vérifier son résumé, puis l’enregistrer. Tout se passe dans une conversation WhatsApp.
 
-**Statut au 10 octobre 2026 : V1 vérifiée par 66 tests automatisés.** Des appels réels à `gemini-3.8-flash` ont également validé une transcription française sur un WAV synthétisé localement et l’extraction des cinq champs d’un accord. Le service est déployé sur Fly.io et son contrôle de santé répond HTTP 200. Le webhook Meta est vérifié et abonné aux messages. Depuis WhatsApp sur PC, le menu, la saisie d’un accord, la correction du montant et l’enregistrement ont été validés. Un vocal WhatsApp a également été transcrit en français après consentement, puis la transcription a été renvoyée dans la conversation. Après redémarrage, le contrôle de santé répond HTTP 200 et Mes accords restitue le même accord avec ses montants corrigés.
+**État initial au 10 octobre 2026 : V1 validée sur WhatsApp.** Des appels réels à `gemini-3.8-flash` ont également validé une transcription française sur un WAV synthétisé localement et l’extraction des cinq champs d’un accord. Le service est déployé sur Fly.io et son contrôle de santé répond HTTP 200. Le webhook Meta est vérifié et abonné aux messages. Depuis WhatsApp sur PC, le menu, la saisie d’un accord, la correction du montant et l’enregistrement ont été validés. Un vocal WhatsApp a également été transcrit en français après consentement, puis la transcription a été renvoyée dans la conversation. Après redémarrage, le contrôle de santé répond HTTP 200 et Mes accords restitue le même accord avec ses montants corrigés.
 
 ## Le parcours
 
@@ -12,7 +12,23 @@ Une V1 simple : écrire ou dicter un accord en français, vérifier son résumé
 4. Vérifier le résumé : client, produit, total, avance, reste et date. Corriger si besoin, puis confirmer.
 5. Retrouver l’enregistrement dans **Mes accords**.
 
-Le solde est calculé par le code. Un accord enregistré est une **note personnelle du commerçant**, sans confirmation du client. La V1 n’envoie pas de message au client et ne gère pas les paiements mobiles.
+Le solde est calculé par le code. Un accord enregistré est une **note personnelle du commerçant**, sans confirmation du client. Le consentement aux rappels est distinct de la validation de la vente. Les paiements mobiles ne sont pas intégrés.
+
+## Historique, calendrier et rappels — version 0.2
+
+**Déployée et vérifiée le 10 octobre 2026 : 134 tests passent, Ruff valide le code.** La migration du volume Fly.io conserve l’accord initial, avec sauvegarde préalable et intégrité SQLite vérifiées. La commande `calendrier` a restitué son échéance depuis WhatsApp sur PC. Un nouveau vocal a été consenti, transcrit, renvoyé dans WhatsApp et archivé sur le volume privé avec sa transcription. Les callbacks envoyé/livré/lu sont enregistrés. Les rappels et leurs garde-fous sont validés par tests automatisés ; aucun rappel réel à deux destinataires n’a encore été envoyé.
+
+SQLite conserve les contacts, conversations, messages entrants/sortants, statuts de livraison, accords, consentements et événements de rappel. Après accord pour chaque vocal, le fichier sonore privé et sa transcription sont reliés au message d’origine. Les clients connus peuvent aussi demander une transcription sans accéder aux accords du commerçant.
+
+- `calendrier` : échéances du commerçant, à 9 h au Burkina Faso.
+- Fournir le numéro international du client dans le brouillon pour préparer ses rappels.
+- Le client envoie lui-même `ACCEPTER WT-référence` au bot : les deux destinataires peuvent alors recevoir les rappels J−1/J0. Le commerçant transmet la référence au client.
+- `REFUSER WT-référence` retire ce consentement ; `STOP` suspend les rappels du numéro. Après STOP, envoyer `rappels oui`, puis renouveler les consentements client nécessaires.
+- `regle WT-référence` : le commerçant clôture son accord et annule ses rappels à venir.
+
+Un contrôle avant chaque envoi vérifie consentement, STOP, état de l’accord et fenêtre de conversation. En dehors de la fenêtre de texte libre retenue de 23 heures, un modèle approuvé par Meta est requis. Le modèle `wuumtaaba_rappel_echeance_v1` est soumis, **en attente d’approbation** ; les rappels concernés restent bloqués tant qu’il n’est pas configuré après approbation. Un envoi ambigu n’est pas retenté automatiquement.
+
+Le calendrier est intégré à la base et consultable dans WhatsApp, sans synchronisation Google Calendar. Voir [le schéma et l’exploitation](docs/DATABASE.md).
 
 ## Démarrer en local
 
@@ -83,10 +99,10 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 
 ## Limites de la V1
 
-- Pilote fermé : seuls les numéros de `ALLOWED_SENDERS` sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
+- Pilote fermé : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
 - Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot demande un consentement avant de télécharger et transmettre chaque vocal.
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
-- Pas d’interface d’administration, d’encaissement, de signature électronique ou de relance planifiée.
+- Pas d’interface d’administration, d’encaissement, de signature électronique.
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.
-- **Conservation pilote : 30 jours par défaut**, puis suppression automatique des accords, états et messages sur ce serveur (`RETENTION_DAYS`). Prévoir une sauvegarde pour toute utilisation durable.
+- **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Sauvegarder SQLite et le répertoire des médias ; surveiller le volume de 1 Go.
 - Les textes et vocaux sont transmis aux fournisseurs nécessaires au traitement. Ne pas utiliser le pilote avec des données sensibles ; définir accès, durée de conservation et sauvegardes avant une ouverture plus large.

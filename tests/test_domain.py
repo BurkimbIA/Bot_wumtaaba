@@ -83,3 +83,17 @@ def test_menu_has_three_working_choices():
         "list:0",
         "help",
     ]
+
+
+@pytest.mark.parametrize("phone", ["+22670123456", "22670123456"])
+def test_optional_phone_normalized(phone):
+    draft = complete(client_phone=phone)
+    assert draft.client_phone == "22670123456"
+    assert "22670123456" in draft.summary()
+    assert complete().question() is None
+
+
+@pytest.mark.parametrize("phone", ["070123456", "+33 605949083", "123", 22670123456, "abc"])
+def test_phone_never_invents_country(phone):
+    with pytest.raises(ValidationError):
+        complete(client_phone=phone)

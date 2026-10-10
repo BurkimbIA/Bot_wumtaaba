@@ -191,6 +191,8 @@ async def test_gemini_redirect_never_receives_api_key():
         ({"total": "1000"}, False),
         ({"solde": 200}, False),
         ({"due_date": 1700000000}, False),
+        ({"client_phone": "+22670123456"}, True),
+        ({"client_phone": "070123456"}, False),
     ],
 )
 async def test_extraction_schema_and_local_validation(extra, valid):
@@ -198,6 +200,8 @@ async def test_extraction_schema_and_local_validation(extra, valid):
         payload = json.loads(request.content)
         schema = payload["generationConfig"]["responseJsonSchema"]
         assert schema["additionalProperties"] is False
+        assert schema["properties"]["client_phone"] == {"type": ["string", "null"]}
+        assert "client_phone" in schema["required"]
         user_data = json.loads(payload["contents"][0]["parts"][0]["text"])
         assert user_data["brouillon"] == {"client": "Awa"}
         content = {

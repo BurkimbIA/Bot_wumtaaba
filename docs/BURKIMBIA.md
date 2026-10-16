@@ -83,3 +83,9 @@ Le connecteur du Mac interroge le bot Fly par HTTPS, authentifié avec `MAC_BRID
 Sur le Mac, lancer `mac/start.sh`, puis `mac/start-bridge.sh` dans le dépôt `inference_endpoints`. Le second lit `mac/.bridge-config.json` privé (permissions 600, ignoré par Git), contenant `MAC_BRIDGE_API_KEY`. Les deux processus doivent rester actifs, avec le Mac éveillé et connecté. Après 20 secondes sans contact, le back-office indique le Mac hors ligne. Il n’existe aucun basculement automatique vers le cloud payant.
 
 Le conteneur Docker `mac-gateway-1` est seulement un proxy local du port 8766 vers l’API native 8765. Les modèles tournent dans Python sur macOS pour utiliser le GPU Apple Metal ; ils ne tournent pas dans ce conteneur. Le connecteur Fly appelle directement 8765 : Docker n’est pas nécessaire pour cette liaison.
+
+### Recette du sélecteur — 16 octobre 2026
+
+240 tests du bot réussis (dont routage des quatre services, authentification, absence de repli cloud, changement pendant une requête). API administrateur en production : connexion, état Mac en ligne, passage Mac puis Cloud, HTTP 200. Interface vérifiée visuellement sur une instance locale avec données de démonstration.
+
+Échange WhatsApp réel en mode Mac : `/yaaba`, puis « Présente-toi en une phrase. » ; résultat produit par l’API locale et reçu/lu dans WhatsApp, environ 129 secondes de bout en bout. Le texte était répétitif et incohérent : transport validé, qualité du modèle non validée. La limite de sortie du bot est de 256 tokens, contre 64 pour le microbenchmark local antérieur ; ne pas présenter le temps du microbenchmark comme une garantie en conversation.

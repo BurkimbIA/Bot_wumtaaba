@@ -141,7 +141,7 @@ async def test_consent_with_global_stop_does_not_claim_reminders_are_active(bot)
 async def test_public_customer_can_start_own_draft_and_enable_reminders(bot):
     bot.settings.public_access = True
     bot.store.is_known_customer.return_value = True
-    state, replies, agreement = await bot.handle('new-public-user', button('new'), {})
+    state, _replies, agreement = await bot.handle('new-public-user', button('new'), {})
     assert state['mode'] == 'draft' and agreement is None
     await bot.handle('new-public-user', message('rappels oui'), {})
     bot.store.set_reminders_enabled.assert_called_once_with('new-public-user', True)

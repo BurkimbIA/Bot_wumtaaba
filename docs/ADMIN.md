@@ -9,7 +9,7 @@ Quatre vues :
 - Conversations : recherche par numéro, historique des 200 derniers messages, transcription et lecture des fichiers audio conservés.
 - Rappels : destinataires, dates, rôles et filtre par état, notamment consentement requis et blocage de modèle Meta.
 
-Cette version est en lecture seule. Elle ne permet ni envoi manuel, ni modification d’accord, ni suppression. Les listes sont paginées par 25 éléments ; les heures sont affichées au Burkina Faso. Le bouton Actualiser recharge les données.
+Les données métier restent en lecture seule : ni envoi manuel, ni modification d’accord, ni suppression. Depuis la version 0.5, l’onglet **Modèles IA** permet aussi de changer le fournisseur des modèles BurkimbIA entre Mac local et Cloud. Le Mac doit être en ligne pour le sélectionner ; le choix est conservé après redémarrage. Voir [le connecteur et ses limites](BURKIMBIA.md#choisir-les-modèles-mac-ou-cloud). Les listes sont paginées par 25 éléments ; les heures sont affichées au Burkina Faso. Le bouton Actualiser recharge les données.
 
 ## Accès privé
 

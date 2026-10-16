@@ -30,9 +30,9 @@ Un contrôle avant chaque envoi vérifie consentement, STOP, état de l’accord
 
 Le calendrier est intégré à la base et consultable dans WhatsApp, sans synchronisation Google Calendar. Voir [le schéma et l’exploitation](docs/DATABASE.md).
 
-## Back-office administrateur — version 0.3
+## Back-office administrateur — version 0.5
 
-Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, recherche d’accords, conversations avec audios/transcriptions et suivi des rappels. Cette première version est en lecture seule, protégée par une session administrateur. Le code d’accès est dans le fichier local privé `.admin-access.txt` ; il ne figure pas dans GitHub. Voir [la configuration et les limites](docs/ADMIN.md).
+Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, recherche d’accords, conversations avec audios/transcriptions et suivi des rappels. Les données clients sont consultables sous session administrateur. L’onglet **Modèles IA** permet de choisir **Mac local** ou **Cloud BurkimbIA (RunPod)** ; voir [le fonctionnement du connecteur](docs/BURKIMBIA.md#choisir-les-modèles-mac-ou-cloud). Le code d’accès est dans le fichier local privé `.admin-access.txt` ; il ne figure pas dans GitHub. Voir [la configuration et les limites](docs/ADMIN.md).
 
 ## Portail BurkimbIA — version 0.4
 
@@ -112,7 +112,7 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 - Pilote fermé : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
 - Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot demande un consentement avant de télécharger et transmettre chaque vocal.
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
-- Back-office administrateur en lecture seule ; pas d’encaissement ni de signature électronique.
+- Consultation des données et sélection Mac/Cloud dans le back-office ; pas d’encaissement ni de signature électronique.
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.
 - **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Sauvegarder SQLite et le répertoire des médias ; surveiller le volume de 1 Go.
 - Les textes et vocaux sont transmis aux fournisseurs nécessaires au traitement. Ne pas utiliser le pilote avec des données sensibles ; définir accès, durée de conservation et sauvegardes avant une ouverture plus large.

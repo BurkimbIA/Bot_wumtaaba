@@ -116,3 +116,9 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.
 - **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Sauvegarder SQLite et le répertoire des médias ; surveiller le volume de 1 Go.
 - Les textes et vocaux sont transmis aux fournisseurs nécessaires au traitement. Ne pas utiliser le pilote avec des données sensibles ; définir accès, durée de conservation et sauvegardes avant une ouverture plus large.
+
+## CI et déploiement automatique
+
+Le dépôt est hébergé sur [BurkimbIA/Bot_wumtaaba](https://github.com/BurkimbIA/Bot_wumtaaba). Chaque pull request vérifie Ruff, les tests et la construction Docker. Un push sur `main` lance les mêmes contrôles puis déploie `bot-wumtaaba` sur Fly.io et vérifie `/healthz`. Le workflow peut également être lancé manuellement sur `main`. Les déploiements sont sérialisés.
+
+Le secret GitHub `FLY_API_TOKEN` est un jeton de déploiement limité à cette application (validité initiale : un an). Les secrets WhatsApp, Gemini et BurkimbIA restent dans les secrets Fly ; ils ne sont pas injectés dans le workflow. En local, `.env` est exclu de Git et du contexte Docker. Renouveler le jeton de déploiement avant son expiration.

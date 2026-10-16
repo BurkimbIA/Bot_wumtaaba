@@ -227,3 +227,19 @@ async def test_global_disabled_blocks_already_queued_reminder(tmp_path, settings
     whatsapp.send.assert_not_awaited()
     assert store.db.execute("SELECT status FROM outbox").fetchone()[0] == "failed"
     store.close()
+
+
+def test_public_access_accepts_new_sender_and_keeps_limits(settings):
+    settings.public_access = True
+    settings.allowed_senders = ''
+    settings.max_messages_per_hour = 1
+    settings.validate_live()
+    with TestClient(create_app(settings, run_worker=False)) as client:
+        assert post(client, payload(sender='22670000099', msg_id='public')).status_code == 200
+        store = client.app.state.store
+        assert store.db.execute("SELECT status FROM inbox WHERE id='public'").fetchone()[0] == 'pending'
+        post(client, payload(sender='22670000099', msg_id='limited'))
+        assert store.db.execute("SELECT status FROM messages WHERE id='in:limited'").fetchone()[0] == 'ignored'
+        assert client.post('/webhook', json=payload(sender='22670000098')).status_code == 403
+        post(client, payload(sender='22670000098', phone='wrong', msg_id='wrong-phone'))
+        assert store.db.execute("SELECT COUNT(*) FROM inbox WHERE id='wrong-phone'").fetchone()[0] == 0

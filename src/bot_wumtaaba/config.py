@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     transcription_model: str = "gemini-3.8-flash"
     extraction_model: str = "gemini-3.8-flash"
     database_path: Path = Path("data/bot.sqlite3")
+    public_access: bool = False
     allowed_senders: str = ""
     max_audio_bytes: int = Field(default=14_000_000, ge=1024, le=14_000_000)
     max_messages_per_hour: int = Field(default=30, ge=1)
@@ -43,7 +44,7 @@ class Settings(BaseSettings):
         ) if not getattr(self, key).get_secret_value()]
         if not self.whatsapp_phone_number_id.isdigit():
             missing.append("whatsapp_phone_number_id")
-        if not self.senders or not all(s.isdigit() for s in self.senders):
+        if (not self.public_access and not self.senders) or not all(s.isdigit() for s in self.senders):
             missing.append("allowed_senders")
         if len(self.webhook_verify_token.get_secret_value()) < 24:
             missing.append("webhook_verify_token (24 caractères minimum)")

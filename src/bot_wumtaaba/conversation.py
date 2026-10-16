@@ -24,7 +24,8 @@ class Conversation:
         body = message.get("text", {}).get("body", "").strip() if kind == "text" else ""
         action = message.get("interactive", {}).get("button_reply", {}).get("id", "")
         command = body.casefold()
-        customer_only = sender not in self.settings.senders and self.store.is_known_customer(sender)
+        public_access = getattr(self.settings, "public_access", False)
+        customer_only = not public_access and sender not in self.settings.senders and self.store.is_known_customer(sender)
         customer_help = text(
             "Tu peux envoyer un vocal à transcrire. Pour autoriser les rappels, "
             "envoie ACCEPTER WT-référence ; pour les retirer : REFUSER WT-référence. "
@@ -41,7 +42,7 @@ class Conversation:
                                 if customer_only else
                                 "Écris « menu » pour reprendre, ou « rappels oui » pour "
                                 "réactiver tes rappels commerçant."))], None
-        if command == "rappels oui" and (sender in self.settings.senders or customer_only):
+        if command == "rappels oui" and (public_access or sender in self.settings.senders or customer_only):
             self.store.set_reminders_enabled(sender, True)
             return state, [text("Rappels réactivés pour ton numéro. Pour un accord où tu es client, "
                                 "envoie aussi ACCEPTER suivi de sa référence.")], None

@@ -243,7 +243,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
             if (not isinstance(sender, str) or not sender.isdigit()
                     or not isinstance(message_id, str) or not message_id):
                 continue
-            if sender not in settings.senders and not store.is_known_customer(sender):
+            if not settings.public_access and sender not in settings.senders and not store.is_known_customer(sender):
                 store.archive_message(message, status="ignored", reason="not_registered")
                 continue
             try:

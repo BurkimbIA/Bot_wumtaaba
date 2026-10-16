@@ -38,7 +38,7 @@ Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, re
 
 `menu` propose maintenant **BurkimbIA** ou **Wuumtaaba**. BurkimbIA contient traduction français ↔ mooré, transcription de vocaux en mooré, synthèse vocale et une entrée Yaaba dont la disponibilité dépend du raccordement de son API propre. `services` revient aux services BurkimbIA ; `menu` change d’espace et abandonne la saisie en cours.
 
-Le carnet Wuumtaaba conserve Gemini et ses règles de confirmation, de consentement et de rappels. Les audios BurkimbIA sont archivés en privé ; les vocaux entrants nécessitent un consentement avant traitement. Le filtre des utilisateurs autorisés reste inchangé. Voir [les routes API, réglages, limites et protocole de vérification](docs/BURKIMBIA.md). Les tests isolés de cette intégration ne constituent pas une validation de production.
+Le carnet Wuumtaaba conserve Gemini et ses règles de confirmation, de consentement et de rappels. Les audios BurkimbIA sont archivés en privé ; les vocaux entrants nécessitent un consentement avant traitement. En production, `PUBLIC_ACCESS=true` ouvre le bot à tous les numéros. Voir [les routes API, réglages, limites et protocole de vérification](docs/BURKIMBIA.md). Les tests isolés de cette intégration ne constituent pas une validation de production.
 
 ## Démarrer en local
 
@@ -61,6 +61,7 @@ Remplir `.env` localement :
 | `META_APP_SECRET` | Secret de l’application Meta, utilisé pour vérifier la signature des webhooks |
 | `WEBHOOK_VERIFY_TOKEN` | Secret aléatoire choisi pour la vérification du webhook, au moins 24 caractères |
 | `GEMINI_API_KEY` | Clé Gemini créée dans Google AI Studio pour la transcription et l’extraction des champs |
+| `PUBLIC_ACCESS` | `true` pour ouvrir le bot à tous ; `false` pour le pilote fermé (défaut local) |
 | `ALLOWED_SENDERS` | Numéros des testeurs au format international sans `+`, séparés par des virgules |
 
 Créer ou sélectionner une clé dans [Google AI Studio](https://aistudio.google.com/api-keys). Pour saisir les trois secrets sans les afficher, lancer `python scripts/setup_secrets.py`. Le bot utilise `gemini-3.8-flash` pour la transcription et l’extraction des champs ; aucun compte OpenAI n’est nécessaire.
@@ -109,7 +110,8 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 
 ## Limites de la V1
 
-- Pilote fermé : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
+- Production : `PUBLIC_ACCESS=true` dans Fly.io. Chaque utilisateur conserve son propre carnet, les consentements et la limite de messages restent appliqués.
+- Pilote fermé (`PUBLIC_ACCESS=false`) : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
 - Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot demande un consentement avant de télécharger et transmettre chaque vocal.
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
 - Consultation des données et sélection Mac/Cloud dans le back-office ; pas d’encaissement ni de signature électronique.

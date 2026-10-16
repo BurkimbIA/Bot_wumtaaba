@@ -1,4 +1,4 @@
-"""Back-office privé en lecture seule et sessions administrateur éphémères."""
+"""Back-office privé, sélection du fournisseur et sessions administrateur éphémères."""
 
 import base64
 import hashlib
@@ -96,6 +96,37 @@ def install_admin(app, settings):
         response.delete_cookie(cookie, path="/admin", secure=settings.admin_cookie_secure,
                                httponly=True, samesite="strict")
         return response
+
+    def model_bridge(request):
+        bridge = getattr(request.app.state, "model_bridge", None)
+        if bridge is None:
+            raise HTTPException(503, "Sélecteur de modèles indisponible")
+        return bridge
+
+    @router.get("/api/models")
+    async def models(request: Request):
+        authorized(request)
+        return model_bridge(request).status()
+
+    @router.post("/api/models")
+    async def select_models(request: Request):
+        authorized(request)
+        same_origin(request)
+        if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise HTTPException(400, "Une requête JSON est requise")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 1024:
+                raise HTTPException(413, "Requête trop volumineuse")
+        try:
+            body = json.loads(raw)
+        except (ValueError, UnicodeError):
+            raise HTTPException(400, "Requête JSON invalide") from None
+        if (not isinstance(body, dict) or set(body) != {"provider"}
+                or not isinstance(body["provider"], str) or body["provider"] not in {"cloud", "mac"}):
+            raise HTTPException(400, "Choisis le fournisseur cloud ou mac")
+        return model_bridge(request).select(body["provider"])
 
     @router.get("/api/overview")
     async def overview(request: Request):

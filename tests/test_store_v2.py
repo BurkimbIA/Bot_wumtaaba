@@ -203,3 +203,22 @@ def test_stop_then_explicit_resume_requires_client_consent_and_never_requeues():
     store.set_reminders_enabled("merchant", False)
     store.set_reminders_enabled("merchant", True)
     assert store.db.execute("SELECT COUNT(*) FROM reminders WHERE status='pending'").fetchone()[0] == 0
+
+
+def test_generated_audio_metadata_is_private_and_not_sent_to_meta():
+    from bot_wumtaaba.store import Store
+
+    store = Store(":memory:")
+    with store.lock, store.db:
+        identifier = store.queue_outbox("22601010101", {
+            "type": "audio", "audio": {"id": "12345"},
+            "_local_audio": {"storage_path": "private.audio", "mime_type": "audio/mpeg",
+                             "sha256": "abc", "source_text": "Ne y yibeogo"},
+        })
+    outgoing = store.claim_outbox()
+    assert outgoing["content"] == {"type": "audio", "audio": {"id": "12345"}}
+    media = store.db.execute("SELECT storage_path,metadata FROM media_assets WHERE message_id=?",
+                             ("out:" + str(identifier),)).fetchone()
+    assert media["storage_path"] == "private.audio"
+    assert "Ne y yibeogo" in media["metadata"]
+    store.close()

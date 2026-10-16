@@ -5,6 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --gid 10001 bot && useradd --uid 10001 --gid bot --home-dir /app bot
 COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src

@@ -38,6 +38,29 @@ class WhatsApp:
         response.raise_for_status()
         return response.json()["messages"][0]["id"]
 
+    async def upload_audio(self, data: bytes, filename: str, mime: str) -> str:
+        """Upload generated audio privately; outbound messages reference its Meta media ID."""
+        supported = {"audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/mp4": "m4a",
+                     "audio/aac": "aac", "audio/amr": "amr"}
+        mime = mime.split(";", 1)[0].strip().lower()
+        if mime not in supported:
+            raise MediaError("Format de voix générée non compatible avec WhatsApp.")
+        if not data or len(data) > self.s.max_audio_bytes:
+            raise MediaError("La voix générée est vide ou trop volumineuse.")
+        response = await self.http.post(
+            f"{self.base}/{self.s.whatsapp_phone_number_id}/media",
+            headers=self.headers,
+            data={"messaging_product": "whatsapp", "type": mime},
+            files={"file": ("burkimbia." + supported[mime], data, mime)},
+            timeout=60,
+            follow_redirects=False,
+        )
+        response.raise_for_status()
+        media_id = response.json().get("id")
+        if not isinstance(media_id, str) or not media_id.isdigit():
+            raise MediaError("Le transfert de la voix a échoué. Réessaie.")
+        return media_id
+
     async def audio(self, media_id: str) -> tuple[bytes, str, str]:
         if not media_id.isdigit():
             raise MediaError("Identifiant audio invalide")

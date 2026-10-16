@@ -48,7 +48,7 @@ def log_message(db, identifier, sender, payload, direction, timestamp, status, s
         (identifier, sender, direction, kind, body, json.dumps(payload), source,
          outbox_id, remote_id, status, timestamp),
     )
-    if direction == "inbound" and kind in {"audio", "image", "video", "document", "sticker"}:
+    if kind in {"audio", "image", "video", "document", "sticker"}:
         media = payload.get(kind, {})
         db.execute(
             "INSERT OR IGNORE INTO media_assets(message_id,media_id,mime_type,sha256,metadata,updated_at) VALUES(?,?,?,?,?,?)",

@@ -6,7 +6,7 @@ Une V1 simple : écrire ou dicter un accord en français, vérifier son résumé
 
 ## Le parcours
 
-1. Envoyer `menu`, puis choisir **Nouvel accord**.
+1. Envoyer `menu`, choisir **Wuumtaaba**, puis **Nouvel accord**.
 2. Écrire ou dicter : « J’ai vendu deux sacs de riz à Awa pour 30 000 francs CFA. Elle a payé 10 000 francs. Le reste est prévu le 20 octobre 2026. »
 3. Le bot restitue la transcription du vocal et demande les informations manquantes.
 4. Vérifier le résumé : client, produit, total, avance, reste et date. Corriger si besoin, puis confirmer.
@@ -33,6 +33,12 @@ Le calendrier est intégré à la base et consultable dans WhatsApp, sans synchr
 ## Back-office administrateur — version 0.3
 
 Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, recherche d’accords, conversations avec audios/transcriptions et suivi des rappels. Cette première version est en lecture seule, protégée par une session administrateur. Le code d’accès est dans le fichier local privé `.admin-access.txt` ; il ne figure pas dans GitHub. Voir [la configuration et les limites](docs/ADMIN.md).
+
+## Portail BurkimbIA — version 0.4
+
+`menu` propose maintenant **BurkimbIA** ou **Wuumtaaba**. BurkimbIA contient traduction français ↔ mooré, transcription de vocaux en mooré, synthèse vocale et une entrée Yaaba dont la disponibilité dépend du raccordement de son API propre. `services` revient aux services BurkimbIA ; `menu` change d’espace et abandonne la saisie en cours.
+
+Le carnet Wuumtaaba conserve Gemini et ses règles de confirmation, de consentement et de rappels. Les audios BurkimbIA sont archivés en privé ; les vocaux entrants nécessitent un consentement avant traitement. Le filtre des utilisateurs autorisés reste inchangé. Voir [les routes API, réglages, limites et protocole de vérification](docs/BURKIMBIA.md). Les tests isolés de cette intégration ne constituent pas une validation de production.
 
 ## Démarrer en local
 
@@ -106,7 +112,7 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 - Pilote fermé : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
 - Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot demande un consentement avant de télécharger et transmettre chaque vocal.
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
-- Pas d’interface d’administration, d’encaissement, de signature électronique.
+- Back-office administrateur en lecture seule ; pas d’encaissement ni de signature électronique.
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.
 - **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Sauvegarder SQLite et le répertoire des médias ; surveiller le volume de 1 Go.
 - Les textes et vocaux sont transmis aux fournisseurs nécessaires au traitement. Ne pas utiliser le pilote avec des données sensibles ; définir accès, durée de conservation et sauvegardes avant une ouverture plus large.

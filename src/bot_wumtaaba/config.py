@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     meta_app_secret: SecretStr = SecretStr("")
     webhook_verify_token: SecretStr = SecretStr("")
     gemini_api_key: SecretStr = SecretStr("")
+    burkimbia_api_url: str = "https://bia-backend.fly.dev/api/v1"
+    burkimbia_api_key: SecretStr = SecretStr("")
+    burkimbia_translation_model: str = "bia-translation-v1-fast"
+    burkimbia_timeout_seconds: int = Field(default=330, ge=5, le=360)
+    mac_bridge_api_key: SecretStr = SecretStr("")
+    burkimbia_yaaba_enabled: bool = False
     graph_version: str = "v25.0"
     transcription_model: str = "gemini-3.8-flash"
     extraction_model: str = "gemini-3.8-flash"

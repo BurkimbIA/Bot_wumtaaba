@@ -224,3 +224,28 @@ async def test_extraction_schema_and_local_validation(extra, valid):
         else:
             with pytest.raises(ValidationError):
                 await ai.extract("vente", {"client": "Awa"})
+
+
+async def test_upload_generated_audio_returns_private_media_id():
+    def handler(request):
+        assert request.url.path == "/v25.0/123/media"
+        assert request.headers["authorization"] == "Bearer test-meta"
+        assert b'name="messaging_product"' in request.content
+        assert b"whatsapp" in request.content
+        assert b'filename="burkimbia.mp3"' in request.content
+        return httpx.Response(200, json={"id": "9876"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        assert await WhatsApp(settings(), http).upload_audio(
+            b"ID3sample", "unsafe/path.mp3", "audio/mpeg"
+        ) == "9876"
+
+
+@pytest.mark.parametrize("data,mime", [(b"", "audio/mpeg"), (b"x", "text/html")])
+async def test_upload_rejects_invalid_audio_before_network(data, mime):
+    def handler(request):
+        pytest.fail("invalid audio must not be uploaded")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        with pytest.raises(MediaError):
+            await WhatsApp(settings(), http).upload_audio(data, "sample", mime)

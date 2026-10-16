@@ -75,3 +75,51 @@ def test_audio_private_and_supports_range(tmp_path):
         detail=client.get('/admin/api/conversations/22670000000').json()
         assert detail['messages'][0]['media']['transcript'] == 'Bonjour'
         assert 'storage_path' not in str(detail)
+
+
+def test_models_admin_auth_offline_and_persisted_selection(tmp_path):
+    from bot_wumtaaba.model_bridge import ModelBridge
+
+    settings = config(tmp_path)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        bridge = ModelBridge(client.app.state.store, 'test-bridge-secret-' + 'x'*32)
+        client.app.state.model_bridge = bridge
+        assert client.get('/admin/api/models').status_code == 401
+        assert client.post('/admin/api/models', json={'provider': 'mac'}).status_code == 401
+        client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        status = client.get('/admin/api/models')
+        assert status.status_code == 200 and status.json()['provider'] == 'cloud'
+        assert status.headers['cache-control'] == 'no-store'
+        assert 'test-bridge-secret' not in status.text
+        assert client.post('/admin/api/models', json={'provider': 'mac'}).status_code == 409
+        bridge.poll(heartbeat_only=True)
+        response = client.post('/admin/api/models', json={'provider': 'mac'},
+                               headers={'Origin': 'https://testserver'})
+        assert response.status_code == 200 and response.json()['provider'] == 'mac'
+        assert bridge.provider == 'mac'
+        assert client.post('/admin/api/models', json={'provider': 'cloud'},
+                           headers={'Origin': 'https://evil.test'}).status_code == 403
+        assert bridge.provider == 'mac'
+        response = client.post('/admin/api/models', json={'provider': 'cloud'})
+        assert response.status_code == 200 and bridge.provider == 'cloud'
+        client.post('/admin/logout')
+        assert client.get('/admin/api/models').status_code == 401
+
+
+def test_models_admin_strict_small_json(tmp_path):
+    from bot_wumtaaba.model_bridge import ModelBridge
+
+    settings = config(tmp_path)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        bridge = ModelBridge(client.app.state.store, 'test-bridge-secret-' + 'x'*32)
+        client.app.state.model_bridge = bridge
+        client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        for value in ({'provider': 'other'}, {'provider': []}, {'provider': 'cloud', 'extra': True}, []):
+            assert client.post('/admin/api/models', json=value).status_code == 400
+        assert client.post('/admin/api/models', content='{"provider":"mac"}',
+                           headers={'Content-Type': 'text/plain'}).status_code == 400
+        assert client.post('/admin/api/models', content='not-json',
+                           headers={'Content-Type': 'application/json'}).status_code == 400
+        assert client.post('/admin/api/models', content='x'*1025,
+                           headers={'Content-Type': 'application/json'}).status_code == 413
+        assert bridge.provider == 'cloud'

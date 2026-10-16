@@ -13,10 +13,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from .admin import install_admin
+from .burkimbia import BurkimbIA
 from .clients import Intelligence, MediaError, WhatsApp
 from .config import Settings
 from .conversation import Conversation
 from .domain import text
+from .model_bridge import ModelBridge, install_bridge
+from .portal import PortalConversation
 from .reminders import can_send_outbox, queue_due_reminders
 from .store import Store
 
@@ -145,9 +148,14 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         store.recover()
         store.purge(settings.retention_days)
         app.state.store = store
+        app.state.model_bridge = ModelBridge(
+            store, settings.mac_bridge_api_key, settings.burkimbia_timeout_seconds
+        )
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
             whatsapp = WhatsApp(settings, http)
-            conversation = Conversation(settings, whatsapp, Intelligence(settings, http), store)
+            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store)
+            burkimbia = BurkimbIA(settings, http, app.state.model_bridge)
+            conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy)
 
             async def worker():
                 last_purge = time.monotonic()
@@ -182,7 +190,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.3.1",
+        version="0.5.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -194,7 +202,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.3.1"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.5.0"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):
@@ -256,6 +264,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         # Accuser réception seulement après écriture durable en SQLite.
         return {"status": "accepted"}
 
+    install_bridge(app, lambda: app.state.model_bridge)
     install_admin(app, settings)
     return app
 

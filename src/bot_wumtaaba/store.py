@@ -236,6 +236,8 @@ class Store:
     def queue_outbox(self, recipient, content, source_message_id=None, created_at=None):
         """Caller owns lock/transaction: used atomically by inbox and reminder workers."""
         now = time.time()
+        content = dict(content)
+        local_audio = content.pop("_local_audio", None)
         cursor = self.db.execute(
             "INSERT INTO outbox(recipient,content,created_at,available_at) VALUES(?,?,?,?)",
             (recipient, json.dumps(content), now if created_at is None else created_at, now),
@@ -243,6 +245,14 @@ class Store:
         identifier = cursor.lastrowid
         log_message(self.db, "out:" + str(identifier), recipient, content, "outbound", now,
                     "pending", source=source_message_id, outbox_id=identifier)
+        if local_audio and content.get("type") == "audio":
+            self.db.execute(
+                "UPDATE media_assets SET mime_type=?,sha256=?,storage_path=?,metadata=?,updated_at=? "
+                "WHERE message_id=?",
+                (local_audio.get("mime_type"), local_audio.get("sha256"),
+                 local_audio.get("storage_path"), json.dumps(local_audio), now,
+                 "out:" + str(identifier)),
+            )
         return identifier
 
     def _sync_outbox(self, identifier):

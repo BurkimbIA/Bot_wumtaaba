@@ -155,8 +155,8 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         )
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
             whatsapp = WhatsApp(settings, http)
-            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store)
             burkimbia = BurkimbIA(settings, http, app.state.model_bridge)
+            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store, burkimbia)
             conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy)
 
             async def worker():
@@ -192,7 +192,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.6.0",
+        version="0.7.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -204,7 +204,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.6.0"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.7.0"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):

@@ -32,6 +32,7 @@ def setup():
 async def test_confirmation_only_and_stale_buttons(setup):
     bot, _, _, _ai = setup
     state, _, agreement = await bot.handle("alice", button("new"), {})
+    state, _, _ = await bot.handle("alice", button("language:french:" + state["language_choice"]), state)
     state, _, agreement = await bot.handle("alice", msg("Ma vente"), state)
     assert agreement is None
     old = state["confirmation"]

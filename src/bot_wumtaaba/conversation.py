@@ -6,9 +6,11 @@ from uuid import uuid4
 
 import httpx
 
+from . import payments
 from .clients import MediaError
 from .domain import Draft, buttons, chunks, menu, text
 from .media import archive_audio
+from .mobile import pairing_operation
 
 
 class Conversation:
@@ -22,7 +24,7 @@ class Conversation:
         state = deepcopy(state)
         kind = message.get("type")
         body = message.get("text", {}).get("body", "").strip() if kind == "text" else ""
-        action = message.get("interactive", {}).get("button_reply", {}).get("id", "")
+        action = message.get("interactive", {}).get("button_reply", message.get("interactive", {}).get("list_reply", {})).get("id", "")
         command = body.casefold()
         public_access = getattr(self.settings, "public_access", False)
         customer_only = not public_access and sender not in self.settings.senders and self.store.is_known_customer(sender)
@@ -62,11 +64,24 @@ class Conversation:
             return state, [text(reply)], None
         if customer_only and kind != "audio" and not action.startswith(("audio:", "refuse:")):
             return {}, [customer_help], None
+        if command in {"application", "appli"}:
+            operation, code = pairing_operation(sender)
+            return state, [text("*Connecter l’application Wuumtaaba*\n"
+                                "Ton code personnel (valable 5 minutes, une seule utilisation) :\n"
+                                + code + "\nSaisis-le uniquement dans ton application. Ne le partage pas.\n"
+                                "« deconnecter application » révoque tous les appareils.")], operation
+        if command in {"deconnecter application", "déconnecter application"}:
+            return state, [text("Tous tes accès à l’application ont été déconnectés.")], {"_operation": "mobile_revoke"}
+        payment_result = payments.handle(self.store, sender, state, command, action)
+        if payment_result is not None:
+            return payment_result
+        if body and state.get("mode") in {"payment_select", "payment_amount"} and command not in {"menu", "annuler", "bonjour", "salut"}:
+            state.pop("pending_audio", None)
+            return payments.prepare(self.store, sender, state, body)
         settled = re.fullmatch(r"(?:regle|réglé|paye|payé)\s+(?:wt-)?([a-f0-9]{8})", command)
         if settled:
             matched = self.store.settle_agreement(sender, "WT-" + settled[1].upper())
-            return state, [text("Accord marqué réglé et rappels annulés. Le montant de "
-                                "l’avance d’origine reste conservé dans l’historique."
+            return state, [text("Accord marqué réglé : versement du solde ajouté à l’historique et rappels annulés."
                                 if matched else "Aucun accord correspondant dans ton carnet.")], None
         if command == "calendrier":
             records = self.store.calendar_for(sender)
@@ -104,13 +119,16 @@ class Conversation:
                 ],
                 None,
             )
-        if action == "help" or command in {"3", "aide"}:
+        if action == "help" or command == "aide":
             return (
                 state,
                 [
                     text(
                         "1 — Nouvel accord : décris ta vente puis vérifie et confirme le résumé.\n"
                         "2 — Mes accords : consulte tes accords enregistrés.\n"
+                        "3 — Ajouter un paiement : choisis l’accord, saisis le montant, confirme.\n"
+                        "« historique WT-référence » : détail des versements.\n"
+                        "« application » : connecter ton carnet mobile.\n"
                         "« calendrier » : échéances à venir.\n"
                         "« réglé WT-référence » : clôturer un accord et annuler ses rappels.\n"
                         "« STOP » : désactiver tes rappels ; « rappels oui » : les réactiver.\n"
@@ -135,15 +153,16 @@ class Conversation:
             if not records:
                 return state, [menu("Aucun accord enregistré sur cette page.")], None
             lines = ["*Tes accords enregistrés*"]
+            rows = []
             for record in records[:5]:
-                draft = Draft.model_validate({k: record.get(k) for k in Draft.model_fields})
-                lines.append(
-                    "Réf. WT-"
-                    + record["id"][:8].upper()
-                    + "\n"
-                    + draft.summary().replace("Accord à vérifier", "Accord enregistré")
-                )
-            replies = chunks("\n\n".join(lines))
+                ref = "WT-" + record["id"][:8].upper()
+                lines.append(f"{ref} · {record['client']} · reste {payments.money(record['total']-record['paid'])}")
+                rows.append({"id": "detail:" + record['id'], "title": ref,
+                             "description": f"{record['client'][:30]} · {payments.money(record['total']-record['paid'])}"})
+            replies = chunks("\n".join(lines))
+            replies.append({"type": "interactive", "interactive": {"type": "list",
+                "body": {"text": "Ouvre un accord pour voir ses versements ou ajouter un paiement."},
+                "action": {"button": "Détails des accords", "sections": [{"title": "Accords", "rows": rows}]}}})
             if len(records) > 5:
                 replies.append(
                     buttons("Voir les accords suivants", [(f"list:{offset + 5}", "Suivants")])
@@ -169,6 +188,8 @@ class Conversation:
                 agreement,
             )
         if kind == "audio":
+            # A new voice correction invalidates any older payment summary immediately.
+            state.pop("payment", None)
             media_id = message.get("audio", {}).get("id", "")
             if not media_id.isdigit():
                 return (
@@ -223,6 +244,9 @@ class Conversation:
             state.pop("pending_audio", None)
             prefix = chunks("🎙️ *Transcription française*\n" + transcript)
             # Une transcription seule est utile sans forcer la création d'un accord.
+            if state.get("mode") == "payment_amount":
+                new_state, replies, operation = payments.prepare(self.store, sender, state, transcript)
+                return new_state, prefix + replies, operation
             if state.get("mode") != "draft":
                 return state, prefix + [customer_help if customer_only else menu()], None
             return await self._extract(transcript, state, prefix)

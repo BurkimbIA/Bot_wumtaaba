@@ -4,9 +4,11 @@ import json
 import sqlite3
 import threading
 import time
+import unicodedata
 from pathlib import Path
 
 from .migrations import contact, log_message, migrate, normalize_agreement
+from .mobile import apply_mobile_operation
 
 
 class Store:
@@ -16,6 +18,9 @@ class Store:
         self.lock = threading.RLock()
         self.db = sqlite3.connect(str(path), check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self.db.create_function("search_fold", 1, lambda value: "".join(
+            c for c in unicodedata.normalize("NFKD", str(value or "")).casefold()
+            if not unicodedata.combining(c)), deterministic=True)
         self.db.executescript("""
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS sessions (
@@ -121,12 +126,20 @@ class Store:
                 "DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at",
                 (sender, json.dumps(state), now),
             )
-            if agreement:
+            if agreement and agreement.get("_operation") in {"mobile_pair", "mobile_revoke"}:
+                apply_mobile_operation(self.db, sender, agreement)
+            elif agreement and agreement.get("_operation") == "payment":
+                self._apply_payment(sender, agreement, message_id)
+            elif agreement:
                 self.db.execute(
                     "INSERT INTO agreements(id,sender,data,created_at) VALUES(?,?,?,?)",
                     (agreement["id"], sender, json.dumps(agreement), now),
                 )
                 normalize_agreement(self.db, agreement["id"], sender, agreement, now, now)
+                if agreement.get("paid", 0) > 0:
+                    self.db.execute("INSERT INTO payments VALUES(?,?,?,?,?,?,?)", (
+                        "advance:" + agreement["id"], agreement["id"], agreement["paid"],
+                        "initial", sender, None, now))
                 self._audit("agreement_created", agreement["id"], {"sender": sender})
             # Les sorties héritent de la date du message entrant, pour la fenêtre Meta.
             received_at = min(now, int(json.loads(row["message"]).get("timestamp", now)))
@@ -399,18 +412,82 @@ class Store:
             (time.time(), event_id, event_id, recipient, recipient),
         )
 
-    def settle_agreement(self, sender, reference):
-        reference = reference.upper()
-        if not reference.startswith("WT-"):
-            reference = "WT-" + reference
-        with self.lock, self.db:
-            rows = self.db.execute("SELECT id FROM agreements WHERE sender=? AND reference=?", (sender, reference)).fetchall()
+    def get_agreement(self, sender, reference):
+        with self.lock:
+            rows = self.db.execute(
+                "SELECT a.*,COALESCE(e.status,'open') AS status FROM agreements a "
+                "LEFT JOIN calendar_events e ON e.agreement_id=a.id "
+                "WHERE a.sender=? AND (a.reference=? OR a.id=?)",
+                (sender, reference.upper(), reference),
+            ).fetchall()
             if len(rows) != 1:
+                return None
+            row = rows[0]
+            return {**json.loads(row["data"]), "id": row["id"], "reference": row["reference"],
+                    "paid": row["paid"], "total": row["total"],
+                    "balance": max(0, row["total"] - row["paid"]), "status": row["status"],
+                    "created_at": row["created_at"]}
+
+    def payment_history(self, sender, reference, offset=0, limit=20):
+        with self.lock:
+            agreement = self.get_agreement(sender, reference)
+            if not agreement:
+                return []
+            return [dict(row) for row in self.db.execute(
+                "SELECT id,amount,kind,actor,created_at FROM payments WHERE agreement_id=? "
+                "ORDER BY created_at,id LIMIT ? OFFSET ?", (agreement["id"], limit, offset))]
+
+    def _apply_payment(self, sender, operation, source_message_id=None):
+        """Caller owns the transaction: ledger + balance + inbox + replies commit together."""
+        existing = self.db.execute("SELECT * FROM payments WHERE id=?", (operation["id"],)).fetchone()
+        if existing:
+            if (existing["actor"] != sender or existing["agreement_id"] != operation["agreement_id"]
+                    or existing["amount"] != operation["amount"]):
+                raise ValueError("Identifiant de paiement déjà utilisé")
+            return
+        row = self.get_agreement(sender, operation["agreement_id"])
+        amount = operation["amount"]
+        if (row is None or row["status"] not in {"open", "paid", "settled"}
+                or type(amount) is not int or amount <= 0 or amount > row["balance"]):
+            raise ValueError("Paiement invalide ou supérieur au solde")
+        if row["paid"] != operation["expected_paid"]:
+            raise ValueError("Solde modifié : préparer un nouveau paiement")
+        self.db.execute("INSERT INTO payments VALUES(?,?,?,?,?,?,?)", (
+            operation["id"], row["id"], amount, operation.get("kind", "payment"),
+            sender, source_message_id, time.time()))
+        paid = row["paid"] + amount
+        data = json.loads(self.db.execute("SELECT data FROM agreements WHERE id=?", (row["id"],)).fetchone()[0])
+        data["paid"] = paid
+        self.db.execute("UPDATE agreements SET paid=?,data=? WHERE id=?", (paid, json.dumps(data), row["id"]))
+        if paid == row["total"]:
+            self.db.execute("UPDATE calendar_events SET status='settled' WHERE agreement_id=?", (row["id"],))
+            self.db.execute("UPDATE reminders SET status='cancelled' WHERE event_id=? AND status IN('pending','pending_consent','blocked_template','queued','stopped')", (row["id"],))
+        # Refresh unsent reminder content in the same transaction as the balance.
+        for reminder in self.db.execute(
+            "SELECT r.id,r.outbox_id,o.content FROM reminders r JOIN outbox o ON o.id=r.outbox_id "
+            "WHERE r.event_id=? AND r.status='queued' AND o.status='pending'", (row["id"],)).fetchall():
+            payload = json.loads(reminder["content"])
+            balance = row["total"] - paid
+            if payload.get("type") == "text":
+                payload["text"]["body"] = (f"Rappel pour l’accord {row['reference']} : solde {balance} F CFA, "
+                    f"échéance {row['due_date']}. Envoyez STOP pour arrêter les rappels.")
+            elif payload.get("type") == "template":
+                payload["template"]["components"][0]["parameters"][1]["text"] = str(balance)
+            self.db.execute("UPDATE outbox SET content=? WHERE id=?", (json.dumps(payload), reminder["outbox_id"]))
+            self.db.execute("UPDATE reminders SET payload=? WHERE id=?", (json.dumps(payload), reminder["id"]))
+            self.db.execute("UPDATE messages SET payload=?,text=? WHERE outbox_id=?",
+                            (json.dumps(payload), payload.get("text", {}).get("body"), reminder["outbox_id"]))
+        self._audit("payment_recorded", row["id"], {"payment_id": operation["id"], "amount": amount, "paid": paid, "sender": sender})
+
+    def settle_agreement(self, sender, reference):
+        from uuid import uuid4
+        with self.lock, self.db:
+            row = self.get_agreement(sender, reference if reference.upper().startswith("WT-") else "WT-" + reference.upper())
+            if row is None:
                 return False
-            identifier = rows[0][0]
-            self.db.execute("UPDATE calendar_events SET status='settled' WHERE agreement_id=?", (identifier,))
-            self.db.execute("UPDATE reminders SET status='cancelled' WHERE event_id=? AND status IN('pending','pending_consent','blocked_template','queued','stopped')", (identifier,))
-            self._audit("agreement_settled", identifier, {"sender": sender})
+            if row["balance"]:
+                self._apply_payment(sender, {"id": uuid4().hex, "agreement_id": row["id"],
+                    "amount": row["balance"], "expected_paid": row["paid"], "kind": "settlement"})
             return True
 
     def is_known_customer(self, sender):

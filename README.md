@@ -4,6 +4,12 @@ Une V1 simple : écrire ou dicter un accord en français, vérifier son résumé
 
 **État initial au 10 octobre 2026 : V1 validée sur WhatsApp.** Des appels réels à `gemini-3.8-flash` ont également validé une transcription française sur un WAV synthétisé localement et l’extraction des cinq champs d’un accord. Le service est déployé sur Fly.io et son contrôle de santé répond HTTP 200. Le webhook Meta est vérifié et abonné aux messages. Depuis WhatsApp sur PC, le menu, la saisie d’un accord, la correction du montant et l’enregistrement ont été validés. Un vocal WhatsApp a également été transcrit en français après consentement, puis la transcription a été renvoyée dans la conversation. Après redémarrage, le contrôle de santé répond HTTP 200 et Mes accords restitue le même accord avec ses montants corrigés.
 
+## Paiements partiels et application mobile — version 0.6
+
+Le bot permet désormais de choisir un accord, saisir un versement, vérifier son nouveau solde puis confirmer. Chaque versement est daté dans un journal ; `historique WT-référence` donne les détails. Les accords peuvent être consultés dans l’application Flutter facultative, reliée par un code obtenu avec `application` dans WhatsApp. L’application est en lecture seule : les actions et vocaux restent dans WhatsApp. Voir [le fonctionnement, la migration et l’API mobile](docs/PAYMENTS_MOBILE.md).
+
+Cette section décrit le nouveau code. Les validations de production datées ci-dessous concernent les versions précédentes ; consulter le rapport de livraison pour l’état du déploiement 0.6.
+
 ## Le parcours
 
 1. Envoyer `menu`, choisir **Wuumtaaba**, puis **Nouvel accord**.

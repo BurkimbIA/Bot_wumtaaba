@@ -23,7 +23,7 @@ Le code Flutter correspondant est dans `/Users/josias/Documents/Personnal/Burkim
 
 ## État de mise en service
 
-**Non déployé en production dans cette session.** Le service Fly vérifié avant développement était en version 0.5.0. Le nouveau code attend une revue et un déploiement avec sauvegarde externe de SQLite. Aucun message réel n’a été envoyé à des commerçants ou clients.
+**Déployé en production le 27 octobre 2026 à la demande de Josias.** Le contrôle HTTPS répond en version 0.6.0. Les trois accords sont conservés ; migrations 2 et 3 présentes ; intégrité OK et aucun écart entre le journal des paiements et les soldes. La même machine et le même volume sont conservés. Voir `DEPLOYMENT_2026-10-27.md`. Aucun versement de test n’a été ajouté aux données réelles.
 
 Recette après déploiement sur un compte de test : créer une vente de 75 000 F avec 25 000 F d’avance, confirmer 20 000 F puis 10 000 F, vérifier le reste de 20 000 F dans WhatsApp et Flutter, solder et vérifier 0 F, redémarrer, vérifier les quatre entrées du journal (avance + trois versements), rejouer un ancien bouton, puis révoquer les accès mobiles.
 

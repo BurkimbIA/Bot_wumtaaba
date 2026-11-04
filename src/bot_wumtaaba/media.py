@@ -1,4 +1,4 @@
-"""Private audio archive: generated filenames only, atomic writes, no public URL."""
+"""Private audio archive in a Supabase Storage bucket: generated names only, no public URL."""
 
 import hashlib
 import os
@@ -6,23 +6,34 @@ import tempfile
 from pathlib import Path
 
 
-def archive_audio(directory: Path, message_id: str, data: bytes, mime: str) -> dict:
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+class MediaStore:
+    """Private bucket behind the server key; viewers only reach audio through /admin."""
+
+    def __init__(self, settings, http):
+        self.http = http
+        self.url = f"{settings.supabase_url.rstrip('/')}/storage/v1/object/{settings.media_bucket}/"
+        key = settings.supabase_api_key.get_secret_value()
+        self.headers = {"apikey": key, "Authorization": "Bearer " + key}
+
+    async def put(self, name, data, mime):
+        response = await self.http.post(self.url + name, content=data, headers={
+            **self.headers, "Content-Type": mime or "application/octet-stream", "x-upsert": "true"})
+        response.raise_for_status()
+
+    async def get(self, name):
+        response = await self.http.get(self.url + name, headers=self.headers)
+        # Storage answers 400 with a 404 body for a missing object.
+        if response.status_code in {400, 404}:
+            return None
+        response.raise_for_status()
+        return response.content
+
+
+async def archive_audio(media, message_id: str, data: bytes, mime: str) -> dict:
     digest = hashlib.sha256(data).hexdigest()
-    # Stable per inbound message and content, so provider retries reuse the same file.
+    # Stable per inbound message and content, so provider retries reuse the same object.
     filename = hashlib.sha256((message_id + digest).encode()).hexdigest() + ".audio"
-    descriptor, temporary = tempfile.mkstemp(prefix=".audio-", dir=directory)
-    try:
-        with os.fdopen(descriptor, "wb") as output:
-            os.fchmod(output.fileno(), 0o600)
-            output.write(data)
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, directory / filename)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    await media.put(filename, data, mime)
     return {
         "mime_type": mime, "sha256": digest, "byte_count": len(data),
         "storage_path": filename, "status": "archived",

@@ -1,4 +1,4 @@
-from pathlib import Path
+import re
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -17,14 +17,14 @@ def button(action):
 
 
 @pytest.fixture
-def bot(tmp_path):
-    settings = SimpleNamespace(media_directory=tmp_path, senders={"merchant"})
+def bot(media):
+    settings = SimpleNamespace(senders={"merchant"})
     store = Mock()
     store.is_known_customer.return_value = False
     wa, intelligence = AsyncMock(), AsyncMock()
     wa.audio.return_value = (b"private audio", "audio.ogg", "audio/ogg")
     intelligence.transcribe.return_value = "Bonjour le client"
-    return Conversation(settings, wa, intelligence, store)
+    return Conversation(settings, wa, intelligence, store, media)
 
 
 async def test_voice_archive_bound_to_original_message_and_consent(bot):
@@ -32,17 +32,16 @@ async def test_voice_archive_bound_to_original_message_and_consent(bot):
         "id": "wamid-original", "type": "audio", "audio": {"id": "123"}
     }, {})
     assert "conservé en privé" in str(replies)
-    assert list(bot.settings.media_directory.iterdir()) == []
+    assert bot.media.objects == {}
     await bot.handle("merchant", button("audio:obsolete"), state)
     bot.whatsapp.audio.assert_not_awaited()
     token = state["pending_audio"]["token"]
     _, replies, _ = await bot.handle("merchant", button("audio:" + token), state)
-    path = next(bot.settings.media_directory.iterdir())
-    assert path.read_bytes() == b"private audio"
-    assert path.stat().st_mode & 0o777 == 0o600
+    [(name, (data, _mime))] = bot.media.objects.items()
+    assert data == b"private audio"
     calls = bot.store.record_media.call_args_list
     assert all(call.args[0] == "wamid-original" for call in calls)
-    assert calls[0].kwargs["metadata"]["storage_path"] == path.name
+    assert calls[0].kwargs["metadata"]["storage_path"] == name
     assert calls[1].kwargs["transcript"] == "Bonjour le client"
     assert "Bonjour le client" in str(replies)
 
@@ -53,17 +52,17 @@ async def test_failed_transcription_keeps_file_and_records_failure(bot):
         "id": "original", "type": "audio", "audio": {"id": "123"}
     }, {})
     _, replies, _ = await bot.handle("merchant", button("audio:" + state["pending_audio"]["token"]), state)
-    assert len(list(bot.settings.media_directory.iterdir())) == 1
+    assert len(bot.media.objects) == 1
     assert bot.store.record_media.call_args.kwargs["metadata"]["status"] == "failed"
     assert "invalid provider" not in str(replies)
 
 
-def test_archive_deterministic_private_and_no_path_injection(tmp_path):
-    first = archive_audio(tmp_path, "../../evil", b"voice", "audio/ogg")
-    second = archive_audio(tmp_path, "../../evil", b"voice", "audio/ogg")
+async def test_archive_deterministic_private_and_no_path_injection(media):
+    first = await archive_audio(media, "../../evil", b"voice", "audio/ogg")
+    second = await archive_audio(media, "../../evil", b"voice", "audio/ogg")
     assert first == second
-    assert len(list(tmp_path.iterdir())) == 1
-    assert Path(first["storage_path"]).name == first["storage_path"]
+    assert len(media.objects) == 1
+    assert re.fullmatch(r"[0-9a-f]{64}\.audio", first["storage_path"])
 
 
 async def test_client_consent_and_refusal_are_reference_scoped(bot):

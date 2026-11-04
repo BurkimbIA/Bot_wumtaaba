@@ -34,7 +34,8 @@ def burkimbia_menu():
 
 
 class PortalConversation:
-    def __init__(self, settings, whatsapp, burkimbia, store, legacy):
+    def __init__(self, settings, whatsapp, burkimbia, store, legacy, media=None):
+        self.media = media
         self.settings, self.whatsapp, self.burkimbia = settings, whatsapp, burkimbia
         self.store, self.legacy = store, legacy
 
@@ -131,8 +132,7 @@ class PortalConversation:
                 return state, [text("Vocal non traité. Tu peux envoyer un autre message.")], None
             try:
                 audio = await self.whatsapp.audio(pending["id"])
-                metadata = archive_audio(self.settings.media_directory, pending["message_id"],
-                                         audio[0], audio[2])
+                metadata = await archive_audio(self.media, pending["message_id"], audio[0], audio[2])
                 metadata.update({"media_id": pending["id"], "provider": "burkimbia"})
                 self.store.record_media(pending["message_id"], metadata=metadata)
                 result = await self.burkimbia.transcribe(*audio, language="moore")
@@ -175,8 +175,8 @@ class PortalConversation:
                     return state, chunks("*Traduction BurkimbIA*\n" + result), None
                 if feature == "synthesize":
                     audio = await self.burkimbia.synthesize(body, language="moore")
-                    metadata = archive_audio(self.settings.media_directory,
-                                             message.get("id") or uuid4().hex, audio[0], audio[2])
+                    metadata = await archive_audio(self.media, message.get("id") or uuid4().hex,
+                                                   audio[0], audio[2])
                     metadata.update({"provider": "burkimbia", "source_text": body})
                     media_id = await self.whatsapp.upload_audio(*audio)
                     return state, [{"type": "audio", "audio": {"id": media_id},

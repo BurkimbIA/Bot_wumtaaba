@@ -12,8 +12,9 @@ from .media import archive_audio
 
 
 class Conversation:
-    def __init__(self, settings, whatsapp, intelligence, store):
+    def __init__(self, settings, whatsapp, intelligence, store, media=None):
         self.settings = settings
+        self.media = media
         self.whatsapp = whatsapp
         self.intelligence = intelligence
         self.store = store
@@ -206,8 +207,7 @@ class Conversation:
                 )
             try:
                 audio = await self.whatsapp.audio(pending["id"])
-                metadata = archive_audio(self.settings.media_directory, pending["message_id"],
-                                         audio[0], audio[2])
+                metadata = await archive_audio(self.media, pending["message_id"], audio[0], audio[2])
                 metadata["media_id"] = pending["id"]
                 self.store.record_media(pending["message_id"], metadata=metadata)
                 transcript = await self.intelligence.transcribe(*audio)

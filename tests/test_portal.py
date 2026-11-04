@@ -7,7 +7,6 @@ import pytest
 from bot_wumtaaba.config import Settings
 from bot_wumtaaba.conversation import Conversation
 from bot_wumtaaba.portal import PortalConversation
-from bot_wumtaaba.store import Store
 
 
 def message(body):
@@ -20,10 +19,9 @@ def choose(action, *, listed=False):
 
 
 @pytest.fixture
-def setup(tmp_path):
-    store = Store(":memory:")
-    settings = Settings(_env_file=None, allowed_senders="22670000000",
-                        media_directory=tmp_path / "media")
+def setup(make_store, media):
+    store = make_store()
+    settings = Settings(_env_file=None, allowed_senders="22670000000")
     wa, api, intelligence = AsyncMock(), AsyncMock(), AsyncMock()
     api.yaaba_available = False
     api.translate.return_value = "Ne y yibeogo"
@@ -31,9 +29,9 @@ def setup(tmp_path):
     api.synthesize.return_value = (b"sound", "voice.mp3", "audio/mpeg")
     wa.upload_audio.return_value = "123456"
     wa.audio.return_value = (b"sound", "voice.ogg", "audio/ogg")
-    legacy = Conversation(settings, wa, intelligence, store)
-    bot = PortalConversation(settings, wa, api, store, legacy)
-    yield SimpleNamespace(bot=bot, store=store, wa=wa, api=api, legacy=legacy)
+    legacy = Conversation(settings, wa, intelligence, store, media)
+    bot = PortalConversation(settings, wa, api, store, legacy, media)
+    yield SimpleNamespace(bot=bot, store=store, wa=wa, api=api, legacy=legacy, media=media)
     store.close()
 
 
@@ -87,9 +85,7 @@ async def test_synthesis_queues_uploaded_media(setup):
     metadata = replies[0]["_local_audio"]
     assert metadata["provider"] == "burkimbia"
     assert metadata["source_text"] == "Ne y yibeogo"
-    path = setup.bot.settings.media_directory / metadata["storage_path"]
-    assert path.read_bytes() == b"sound"
-    assert path.stat().st_mode & 0o777 == 0o600
+    assert setup.media.objects[metadata["storage_path"]] == (b"sound", "audio/mpeg")
 
 
 async def test_audio_consent_archive_and_transcript(setup):
@@ -108,7 +104,7 @@ async def test_audio_consent_archive_and_transcript(setup):
     assert "pending_audio" not in state and "Mooré transcript" in str(replies)
     row = setup.store.db.execute("SELECT transcript,storage_path FROM media_assets WHERE message_id='in:voice1'").fetchone()
     assert row["transcript"] == "Mooré transcript"
-    assert (setup.bot.settings.media_directory / row["storage_path"]).read_bytes() == b"sound"
+    assert setup.media.objects[row["storage_path"]][0] == b"sound"
 
 
 async def test_audio_refusal_and_switch_invalidate(setup):

@@ -8,14 +8,13 @@ kill_timeout = "30s"
 
 [env]
   PUBLIC_ACCESS = "true"
-  DATABASE_PATH = "/app/data/bot.sqlite3"
-  MEDIA_DIRECTORY = "/app/data/media"
   RETENTION_DAYS = "0"
   REMINDER_ENABLED = "true"
   GRAPH_VERSION = "v25.0"
   TRANSCRIPTION_MODEL = "gemini-3.8-flash"
   EXTRACTION_MODEL = "gemini-3.8-flash"
   MAX_AUDIO_BYTES = "14000000"
+  SUPABASE_URL = "https://iagyxtstnbgstdyppgnp.supabase.co"
 
 [[mounts]]
   source = "bot_data"

@@ -8,14 +8,13 @@ from fastapi import FastAPI, HTTPException
 
 from bot_wumtaaba.clients import MediaError
 from bot_wumtaaba.model_bridge import ModelBridge, install_bridge
-from bot_wumtaaba.store import Store
 
 SECRET = "test-mac-connector-key-32-characters-minimum"
 
 
 @pytest.fixture
-def bridge():
-    store = Store(":memory:")
+def bridge(make_store):
+    store = make_store()
     bridge = ModelBridge(store, SECRET, timeout=1)
     yield bridge
     store.close()
@@ -57,17 +56,16 @@ def test_offline_selection_fails_closed(bridge):
     assert bridge.select("cloud")["provider"] == "cloud"
 
 
-def test_provider_persists_and_switch_audited(tmp_path):
-    path = tmp_path / "db.sqlite"
-    store = Store(path)
+def test_provider_persists_and_switch_audited(make_store, dump):
+    store = make_store()
     bridge = ModelBridge(store, SECRET)
     bridge.poll()
     bridge.select("mac")
     row = store.db.execute("SELECT details FROM audit_events WHERE kind='model_provider_changed'").fetchone()
     assert json.loads(row["details"])["previous"] == "cloud"
-    assert SECRET not in "\n".join(store.db.iterdump())
+    assert SECRET not in dump(store)
     store.close()
-    store = Store(path)
+    store = make_store()
     try:
         bridge = ModelBridge(store, SECRET)
         assert bridge.status()["provider"] == "mac"
@@ -77,8 +75,8 @@ def test_provider_persists_and_switch_audited(tmp_path):
 
 
 @pytest.mark.parametrize("secret", ["", "too-short"])
-def test_unconfigured_bridge_cannot_become_online(secret):
-    store = Store(":memory:")
+def test_unconfigured_bridge_cannot_become_online(secret, make_store):
+    store = make_store()
     try:
         bridge = ModelBridge(store, secret)
         bridge.poll()
@@ -215,7 +213,7 @@ async def test_invalid_heartbeat_body_rejected(bridge, client, body):
     ("synthesize", "/tts", {"wav": "UklGRgAAAABXQVZF"}, (b"mp3", "voice.mp3", "audio/mpeg")),
     ("chat", "/chat", {"choices": [{"message": {"content": "Laafi"}}]}, "Laafi"),
 ])
-async def test_burkimbia_real_asgi_bridge_roundtrips(bridge, client, monkeypatch, feature, route, result, expected):
+async def test_burkimbia_real_asgi_bridge_roundtrips(bridge, client, monkeypatch, feature, route, result, expected, dump):
     from unittest.mock import AsyncMock
 
     from bot_wumtaaba.burkimbia import BurkimbIA
@@ -245,7 +243,7 @@ async def test_burkimbia_real_asgi_bridge_roundtrips(bridge, client, monkeypatch
         if feature == "chat":
             assert job["payload"]["model"] == "tengsoaba-4b"
         # Payloads remain ephemeral: SQLite only stores the provider switch.
-        assert "fakevoice" not in "\n".join(bridge.store.db.iterdump())
+        assert "fakevoice" not in dump(bridge.store)
         response = await client.post("/internal/mac/jobs/" + job["id"],
                                      headers={"X-Mac-Key": SECRET},
                                      json={"lease": job["lease"], "result": result})

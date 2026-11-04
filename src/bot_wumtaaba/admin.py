@@ -4,14 +4,17 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
+import tempfile
 import time
 from collections import deque
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from . import admin_data
 
@@ -164,11 +167,16 @@ def install_admin(app, settings):
     @router.get("/api/media/{message_id:path}")
     async def media(request: Request, message_id: str):
         authorized(request)
-        result = admin_data.media_file(request.app.state.store, message_id, settings.media_directory)
-        if result is None:
+        result = admin_data.media_file(request.app.state.store, message_id)
+        data = result and await request.app.state.media.get(result[0])
+        if not data:
             raise HTTPException(404, "Audio introuvable")
-        path, mime = result
-        return FileResponse(path, media_type=mime, content_disposition_type="inline")
+        # A private temporary file lets FileResponse answer Range requests (Safari needs them).
+        descriptor, path = tempfile.mkstemp(prefix="wuumtaaba-admin-")
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(data)
+        return FileResponse(path, media_type=result[1], content_disposition_type="inline",
+                            background=BackgroundTask(os.unlink, path))
 
     @app.middleware("http")
     async def admin_headers(request, call_next):

@@ -18,6 +18,7 @@ from .clients import Intelligence, MediaError, WhatsApp
 from .config import Settings
 from .conversation import Conversation
 from .domain import text
+from .media import MediaStore
 from .model_bridge import ModelBridge, install_bridge
 from .portal import PortalConversation
 from .reminders import can_send_outbox, queue_due_reminders
@@ -144,7 +145,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         settings.validate_live()
-        store = Store(settings.database_path)
+        store = Store(settings.database_url.get_secret_value(), settings.database_schema)
         store.recover()
         store.purge(settings.retention_days)
         app.state.store = store
@@ -153,9 +154,10 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         )
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
             whatsapp = WhatsApp(settings, http)
-            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store)
+            app.state.media = media = MediaStore(settings, http)
+            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store, media)
             burkimbia = BurkimbIA(settings, http, app.state.model_bridge)
-            conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy)
+            conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy, media)
 
             async def worker():
                 last_purge = time.monotonic()
@@ -190,7 +192,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
 
     app = FastAPI(
         title="Wuumtaaba",
-        version="0.5.0",
+        version="0.6.0",
         lifespan=lifespan,
         docs_url=None,
         redoc_url=None,
@@ -202,7 +204,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         task = app.state.worker
         if task and task.done():
             raise HTTPException(503, "worker unavailable")
-        return {"status": "ok", "service": "wuumtaaba", "version": "0.5.0"}
+        return {"status": "ok", "service": "wuumtaaba", "version": "0.6.0"}
 
     @app.get("/webhook", response_class=PlainTextResponse)
     async def verify(request: Request):
@@ -261,7 +263,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                 store.archive_message(message, status="ignored", reason="rate_limited")
                 continue
             store.enqueue(message_id, sender, message)
-        # Accuser réception seulement après écriture durable en SQLite.
+        # Accuser réception seulement après écriture durable en base.
         return {"status": "accepted"}
 
     install_bridge(app, lambda: app.state.model_bridge)

@@ -49,7 +49,7 @@ def _reason(row, now):
 def _pending_optout(store, row):
     """Un retrait reçu prend effet avant les messages coûteux encore en traitement."""
     records = store.db.execute(
-        "SELECT sender,message FROM inbox WHERE sender IN (?,?) "
+        "SELECT sender,message FROM inbox WHERE sender IN (%s,%s) "
         "AND status IN ('pending','processing')",
         (row["recipient"], row["client_phone"]),
     ).fetchall()
@@ -105,11 +105,11 @@ def queue_due_reminders(store, settings, now=None):
     now = time.time() if now is None else now
     queued = 0
     with store.lock, store.db:
-        # BEGIN IMMEDIATE protège également contre deux connexions/processus concurrents.
-        store.db.execute("BEGIN IMMEDIATE")
+        # Le verrou consultatif protège également contre deux connexions/processus concurrents.
+        store.db.execute("SELECT pg_advisory_xact_lock(hashtext('wuumtaaba:queue'))")
         rows = store.db.execute(
             _JOIN + " WHERE r.status IN ('pending','pending_consent','blocked_template') "
-            "AND r.outbox_id IS NULL AND r.scheduled_at<=? ORDER BY r.scheduled_at,r.id",
+            "AND r.outbox_id IS NULL AND r.scheduled_at<=%s ORDER BY r.scheduled_at,r.id",
             (now,),
         ).fetchall()
         for row in rows:
@@ -119,17 +119,17 @@ def queue_due_reminders(store, settings, now=None):
             payload = None if reason else _payload(row, settings, now)
             if reason or payload is None:
                 status = reason or "blocked_template"
-                store.db.execute("UPDATE reminders SET status=? WHERE id=?", (status, row["id"]))
+                store.db.execute("UPDATE reminders SET status=%s WHERE id=%s", (status, row["id"]))
                 if status != row["status"]:
                     store._audit("reminder_status", row["id"], {"status": status})
                 continue
             outbox_id = store.queue_outbox(row["recipient"], payload, created_at=now)
             store.db.execute(
-                "UPDATE outbox SET category='reminder',reminder_id=? WHERE id=?",
+                "UPDATE outbox SET category='reminder',reminder_id=%s WHERE id=%s",
                 (row["id"], outbox_id),
             )
             store.db.execute(
-                "UPDATE reminders SET status='queued',payload=?,outbox_id=? WHERE id=?",
+                "UPDATE reminders SET status='queued',payload=%s,outbox_id=%s WHERE id=%s",
                 (json.dumps(payload), outbox_id, row["id"]),
             )
             store._audit("reminder_queued", row["id"], {"outbox_id": outbox_id})
@@ -143,7 +143,7 @@ def can_send_outbox(store, outgoing, now=None):
         return True
     now = time.time() if now is None else now
     with store.lock, store.db:
-        row = store.db.execute(_JOIN + " WHERE r.id=?", (outgoing.get("reminder_id"),)).fetchone()
+        row = store.db.execute(_JOIN + " WHERE r.id=%s", (outgoing.get("reminder_id"),)).fetchone()
         if row is None or row["outbox_id"] != outgoing["id"] or row["status"] != "queued":
             return False
         reason = "cancelled_consent" if _pending_optout(store, row) else _reason(row, now)
@@ -152,7 +152,7 @@ def can_send_outbox(store, outgoing, now=None):
         if reason:
             # Une sortie déjà créée ne peut jamais être réinsérée après révocation.
             status = "cancelled_consent" if reason == "pending_consent" else reason
-            store.db.execute("UPDATE reminders SET status=? WHERE id=?", (status, row["id"]))
+            store.db.execute("UPDATE reminders SET status=%s WHERE id=%s", (status, row["id"]))
             store._audit("reminder_status", row["id"], {"status": status})
             return False
         return True

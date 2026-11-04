@@ -19,11 +19,11 @@ Les commandes `STOP`, `rappels oui`, `ACCEPTER WT-référence` et `REFUSER WT-r�
 
 Le parcours **Wuumtaaba** conserve Google Gemini pour l’extraction des accords et la transcription française. Le parcours **BurkimbIA** utilise ses propres API. Une indisponibilité BurkimbIA produit un message d’erreur ; le bot ne bascule pas silencieusement vers Gemini.
 
-Chaque vocal destiné à la transcription BurkimbIA demande un accord explicite avant téléchargement depuis Meta, transmission à BurkimbIA et conservation privée. Les commandes `/accepter-vocal` et `/refuser-vocal` répondent à la demande concernant le dernier vocal reçu, uniquement dans le service Transcription avec une demande en attente. Sans demande valide, elles ne déclenchent aucun traitement. Refuser ne déclenche aucun téléchargement ni appel de transcription. L’audio et la transcription sont associés au message reçu dans SQLite et dans le répertoire privé des médias.
+Chaque vocal destiné à la transcription BurkimbIA demande un accord explicite avant téléchargement depuis Meta, transmission à BurkimbIA et conservation privée. Les commandes `/accepter-vocal` et `/refuser-vocal` répondent à la demande concernant le dernier vocal reçu, uniquement dans le service Transcription avec une demande en attente. Sans demande valide, elles ne déclenchent aucun traitement. Refuser ne déclenche aucun téléchargement ni appel de transcription. L’audio et la transcription sont associés au message reçu, dans la base et dans le bucket privé des médias.
 
-Les fichiers vocaux générés sont également archivés dans le répertoire privé, avec le texte source dans les métadonnées. Le bot téléverse l’audio auprès de Meta et envoie son identifiant de média ; il n’expose pas de lien public vers l’archive locale. Les métadonnées internes d’archivage sont retirées avant l’envoi à Meta. L’accès aux médias du back-office reste soumis à l’authentification administrateur.
+Les fichiers vocaux générés sont également archivés dans le bucket privé, avec le texte source dans les métadonnées. Le bot téléverse l’audio auprès de Meta et envoie son identifiant de média ; il n’expose pas de lien public vers l’archive. Les métadonnées internes d’archivage sont retirées avant l’envoi à Meta. L’accès aux médias du back-office reste soumis à l’authentification administrateur.
 
-Les règles de conservation de l’application restent applicables. Avec `RETENTION_DAYS=0`, aucune purge automatique n’est effectuée. Sauvegarder le répertoire des médias avec SQLite et surveiller l’espace disponible.
+Les règles de conservation de l’application restent applicables. Avec `RETENTION_DAYS=0`, aucune purge automatique n’est effectuée. Surveiller l’espace du bucket : 1 Go sur l’offre gratuite de Supabase.
 
 ## Configuration serveur
 
@@ -74,7 +74,7 @@ Le diagnostic RunPod de Tengsoaba a trouvé un template référencé renvoyant H
 
 ## Choisir les modèles Mac ou Cloud
 
-Dans `/admin`, ouvrir **Modèles IA**, puis sélectionner **Mac local** ou **Cloud BurkimbIA (RunPod)**. Le choix est enregistré en SQLite et s’applique aux prochaines demandes BurkimbIA. Une demande déjà commencée termine sur son fournisseur initial. Les accords Wuumtaaba gardent Gemini.
+Dans `/admin`, ouvrir **Modèles IA**, puis sélectionner **Mac local** ou **Cloud BurkimbIA (RunPod)**. Le choix est enregistré dans la base et s’applique aux prochaines demandes BurkimbIA. Une demande déjà commencée termine sur son fournisseur initial. Les accords Wuumtaaba gardent Gemini.
 
 Le mode Cloud conserve les endpoints de la plateforme BurkimbIA ; selon le modèle, le calcul utilise Fly/CPU ou RunPod. Yaaba reste indisponible dans ce mode tant que son endpoint cloud n’est pas réparé. Le mode Mac fournit traduction, transcription, synthèse et Yaaba/Tengsoaba.
 

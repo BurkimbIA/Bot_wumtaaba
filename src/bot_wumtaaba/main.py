@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import json
 import logging
+import os
+import signal
 import time
 from contextlib import asynccontextmanager, suppress
 
@@ -162,6 +164,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
             async def worker():
                 last_purge = time.monotonic()
                 last_schedule = 0
+                last_busy = time.monotonic()
                 while True:
                     try:
                         if time.monotonic() - last_purge > 3600:
@@ -171,14 +174,24 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                             queue_due_reminders(store, settings)
                             last_schedule = time.monotonic()
                         busy = await process_once(store, conversation, whatsapp, settings=settings)
-                        if not busy:
-                            await asyncio.sleep(0.5)
+                        if busy:
+                            last_busy = time.monotonic()
+                            continue
+                        idle = time.monotonic() - max(last_busy, app.state.last_request)
+                        if (settings.idle_shutdown_seconds and idle > settings.idle_shutdown_seconds
+                                and not store.has_pending_work()):
+                            # Exit 0 stops the Fly machine; the next webhook or wake-up starts it.
+                            logger.warning("idle_shutdown idle_seconds=%d", idle)
+                            os.kill(os.getpid(), signal.SIGTERM)
+                            last_busy = time.monotonic()
+                        await asyncio.sleep(0.5)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:  # noqa: BLE001 — frontière worker, logs sans données
                         logger.error("worker_error kind=%s", type(exc).__name__)
                         await asyncio.sleep(2)
 
+            app.state.last_request = time.monotonic()
             task = asyncio.create_task(worker()) if run_worker else None
             app.state.worker = task
             try:
@@ -198,6 +211,13 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+
+    @app.middleware("http")
+    async def track_activity(request, call_next):
+        # Fly health checks must not keep an idle machine awake.
+        if request.url.path != "/healthz":
+            app.state.last_request = time.monotonic()
+        return await call_next(request)
 
     @app.get("/healthz")
     async def health():

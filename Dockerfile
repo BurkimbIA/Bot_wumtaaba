@@ -15,8 +15,9 @@ RUN groupadd --gid 10001 bot && useradd --uid 10001 --gid bot --home-dir /app bo
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
-RUN uv sync --locked --no-dev --no-editable && mkdir -p /app/data && chown -R bot:bot /app/data
-COPY scripts/container_start.py /app/container_start.py
+RUN uv sync --locked --no-dev --no-editable
+
+# Stateless: data and audio live in Supabase, so nothing needs root at start.
+USER bot
 EXPOSE 8000
-ENTRYPOINT ["python", "/app/container_start.py"]
 CMD ["uvicorn", "bot_wumtaaba.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--no-access-log"]

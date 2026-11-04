@@ -86,6 +86,14 @@ class Store:
                             float(message.get("timestamp", now)), "pending")
             return inserted
 
+    def has_pending_work(self):
+        """Queued replies or messages: the bot must not stop before they are handled."""
+        with self.lock:
+            return self.db.execute(
+                "SELECT EXISTS(SELECT 1 FROM inbox WHERE status IN ('pending','processing')) "
+                "OR EXISTS(SELECT 1 FROM outbox WHERE status IN ('pending','sending'))"
+            ).fetchone()[0]
+
     def count_recent(self, sender, seconds=3600):
         with self.lock:
             return self.db.execute(

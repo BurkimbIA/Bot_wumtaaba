@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_api_key: SecretStr = SecretStr("")
     media_bucket: str = "wuumtaaba-media"
+    # 0 = never; on Fly the bot stops itself once idle, and the next request starts it again.
+    idle_shutdown_seconds: int = Field(default=0, ge=0)
     public_access: bool = False
     allowed_senders: str = ""
     max_audio_bytes: int = Field(default=14_000_000, ge=1024, le=14_000_000)

@@ -58,8 +58,8 @@ def prepare(store, sender, state, body):
             # Search is owner-scoped and limited; homonyms are never chosen automatically.
             with store.lock:
                 rows = store.db.execute(
-                    "SELECT id,reference,client_name,paid,total FROM agreements WHERE sender=? "
-                    "AND instr(search_fold(client_name),search_fold(?))>0 ORDER BY created_at DESC LIMIT 6",
+                    "SELECT id,reference,client_name,paid,total FROM agreements WHERE sender=%s "
+                    "AND strpos(search_fold(client_name),search_fold(%s))>0 ORDER BY created_at DESC LIMIT 6",
                     (sender, body.strip()[:100]),
                 ).fetchall()
             if not rows:

@@ -28,7 +28,7 @@ Le solde est calculé par le code. Un accord enregistré est une **note personne
 
 **Déployée et vérifiée le 10 octobre 2026 : 134 tests passent, Ruff valide le code.** La migration du volume Fly.io conserve l’accord initial, avec sauvegarde préalable et intégrité SQLite vérifiées. La commande `calendrier` a restitué son échéance depuis WhatsApp sur PC. Un nouveau vocal a été consenti, transcrit, renvoyé dans WhatsApp et archivé sur le volume privé avec sa transcription. Les callbacks envoyé/livré/lu sont enregistrés. Les rappels et leurs garde-fous sont validés par tests automatisés ; aucun rappel réel à deux destinataires n’a encore été envoyé.
 
-SQLite conserve les contacts, conversations, messages entrants/sortants, statuts de livraison, accords, consentements et événements de rappel. Après accord pour chaque vocal, le fichier sonore privé et sa transcription sont reliés au message d’origine. Les clients connus peuvent aussi demander une transcription sans accéder aux accords du commerçant.
+La base conserve les contacts, conversations, messages entrants/sortants, statuts de livraison, accords, consentements et événements de rappel. Après accord pour chaque vocal, le fichier sonore privé et sa transcription sont reliés au message d’origine. Les clients connus peuvent aussi demander une transcription sans accéder aux accords du commerçant.
 
 - `calendrier` : échéances du commerçant, à 9 h au Burkina Faso.
 - Fournir le numéro international du client dans le brouillon pour préparer ses rappels.
@@ -50,15 +50,16 @@ Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, re
 
 Le carnet Wuumtaaba conserve Gemini et ses règles de confirmation, de consentement et de rappels. Les audios BurkimbIA sont archivés en privé ; les vocaux entrants nécessitent un consentement avant traitement. En production, `PUBLIC_ACCESS=true` ouvre le bot à tous les numéros. Voir [les routes API, réglages, limites et protocole de vérification](docs/BURKIMBIA.md). Les tests isolés de cette intégration ne constituent pas une validation de production.
 
+## Supabase et arrêt à vide — migration de la version 0.7
+
+Les données passent du SQLite du volume Fly.io à Postgres chez Supabase (projet de bia-backend, schéma `wuumtaaba`), et les audios à un bucket privé du même projet. Sans volume, la machine s’arrête d’elle-même quand sa file est vide et repart à la requête suivante ; Supabase la réveille chaque jour à 9 h pour les rappels. Voir [la base](docs/DATABASE.md), dont la copie du volume, et [le déploiement](docs/DEPLOY_FLY.md).
+
 ## Démarrer en local
 
-Python 3.12 ou plus récent est nécessaire.
+Il faut [uv](https://docs.astral.sh/uv/) et [just](https://just.systems) ; uv installe Python 3.12.
 
 ```sh
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.lock
-python -m pip install --no-deps -e .
+just install
 cp .env.example .env
 ```
 
@@ -73,17 +74,20 @@ Remplir `.env` localement :
 | `GEMINI_API_KEY` | Clé Gemini créée dans Google AI Studio pour la transcription et l’extraction des champs |
 | `PUBLIC_ACCESS` | `true` pour ouvrir le bot à tous ; `false` pour le pilote fermé (défaut local) |
 | `ALLOWED_SENDERS` | Numéros des testeurs au format international sans `+`, séparés par des virgules |
+| `DATABASE_URL` | Chaîne de connexion Postgres de Supabase, pooler de session (voir [la base](docs/DATABASE.md)) |
+| `SUPABASE_URL` | `https://iagyxtstnbgstdyppgnp.supabase.co` |
+| `SUPABASE_API_KEY` | Clé secrète du projet Supabase, pour le bucket privé des audios |
 
-Créer ou sélectionner une clé dans [Google AI Studio](https://aistudio.google.com/api-keys). Pour saisir les trois secrets sans les afficher, lancer `python scripts/setup_secrets.py`. Le bot utilise `gemini-3.8-flash` pour la transcription et l’extraction des champs ; aucun compte OpenAI n’est nécessaire.
+Créer ou sélectionner une clé dans [Google AI Studio](https://aistudio.google.com/api-keys). Pour saisir les trois secrets sans les afficher, lancer `uv run python scripts/setup_secrets.py`. Le bot utilise `gemini-3.8-flash` pour la transcription et l’extraction des champs ; aucun compte OpenAI n’est nécessaire.
 
 Les autres réglages et modèles sont dans `.env.example`. Générer le secret du webhook avec `python -c "import secrets; print(secrets.token_urlsafe(32))"`, puis le conserver uniquement dans `.env` et la configuration Meta. Ne jamais publier un token, une capture le contenant ou le fichier `.env`.
 
 ```sh
-python scripts/check_config.py
-uvicorn bot_wumtaaba.main:app --host 127.0.0.1 --port 8000
+uv run python scripts/check_config.py
+just run
 ```
 
-`GET /healthz` vérifie que le service HTTP répond ; il ne garantit pas la validité des tokens ni la disponibilité des fournisseurs. Le serveur doit être lancé avec **un seul processus** : le worker et SQLite sont intégrés à cette V1.
+`GET /healthz` vérifie que le service HTTP répond ; il ne garantit pas la validité des tokens ni la disponibilité des fournisseurs. Le serveur doit être lancé avec **un seul processus** : le worker est intégré au serveur.
 
 Voir [la configuration Meta et le protocole de test réel](docs/SETUP_META.md).
 
@@ -94,29 +98,29 @@ docker compose up --build -d
 docker compose logs -f bot
 ```
 
-Compose expose le service sur `127.0.0.1:8000` et conserve SQLite dans le volume `bot_data`, monté dans `/app/data`. Placer un accès HTTPS devant ce port pour recevoir les webhooks. Aucun hébergement payant n’est provisionné par ces commandes. Ne pas utiliser `docker compose down -v` si les accords doivent être conservés.
+Compose expose le service sur `127.0.0.1:8000` ; les données sont dans la base indiquée par `DATABASE_URL`. Placer un accès HTTPS devant ce port pour recevoir les webhooks. Aucun hébergement payant n’est provisionné par ces commandes.
 
-Pour héberger la V1, suivre [le déploiement Fly.io](docs/DEPLOY_FLY.md) : une machine à Paris avec volume SQLite persistant.
+Pour l’héberger, suivre [le déploiement Fly.io](docs/DEPLOY_FLY.md) : une machine à Paris, sans volume, qui s’arrête quand il n’y a rien à faire.
 
 ## Vérifier le code
 
 ```sh
-ruff check .
-pytest -q
+just lint
+TEST_DATABASE_URL=postgresql://postgres@localhost:5432/postgres just test
 ```
 
-GitHub Actions exécute ces contrôles sur Python 3.12 sans identifiants de production et sans envoyer de messages WhatsApp.
+Les tests ont besoin d’un Postgres local : chaque test crée son propre schéma et le supprime ensuite. GitHub Actions exécute ces contrôles sur Python 3.12, avec un Postgres de service, sans identifiants de production et sans envoyer de messages WhatsApp.
 
 ## Organisation
 
 ```text
 src/bot_wumtaaba/   API, intégrations et logique des accords
-scripts/           Vérification locale de configuration sans exposer les clés
+scripts/           Vérification de configuration, copie du volume Fly.io vers Supabase
 tests/             Tests automatisés isolés des fournisseurs
 docs/              Installation et recette WhatsApp
 ```
 
-FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communique avec Meta et Google Gemini ; SQLite conserve les états et accords. Le flux et les précautions d’exploitation sont décrits dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communique avec Meta, Google Gemini et Supabase Storage ; Postgres (Supabase) conserve les états et accords. Le flux et les précautions d’exploitation sont décrits dans [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Limites de la V1
 
@@ -126,7 +130,7 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
 - Consultation des données et sélection Mac/Cloud dans le back-office ; pas d’encaissement ni de signature électronique.
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.
-- **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Sauvegarder SQLite et le répertoire des médias ; surveiller le volume de 1 Go.
+- **Conservation sans purge automatique par défaut** (`RETENTION_DAYS=0`) pour l’historique et les fichiers audio. Surveiller la base (500 Mo partagés avec bia-backend) et le bucket des audios (1 Go) sur l’offre gratuite de Supabase.
 - Les textes et vocaux sont transmis aux fournisseurs nécessaires au traitement. Ne pas utiliser le pilote avec des données sensibles ; définir accès, durée de conservation et sauvegardes avant une ouverture plus large.
 
 ## CI et déploiement automatique

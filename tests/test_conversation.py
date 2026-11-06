@@ -5,7 +5,6 @@ import pytest
 from bot_wumtaaba.config import Settings
 from bot_wumtaaba.conversation import Conversation
 from bot_wumtaaba.domain import Draft
-from bot_wumtaaba.store import Store
 
 
 def msg(body):
@@ -17,15 +16,15 @@ def button(value):
 
 
 @pytest.fixture
-def setup():
-    store = Store(":memory:")
+def setup(make_store, media):
+    store = make_store()
     wa, ai = AsyncMock(), AsyncMock()
     ai.extract.return_value = Draft(
         client="Awa", product="Riz", total=30000, paid=10000, due_date="2026-12-20"
     )
     ai.transcribe.return_value = "Awa achète du riz."
     wa.audio.return_value = (b"audio", "audio.ogg", "audio/ogg")
-    yield Conversation(Settings(), wa, ai, store), store, wa, ai
+    yield Conversation(Settings(), wa, ai, store, media), store, wa, ai
     store.close()
 
 
@@ -107,7 +106,7 @@ async def test_store_atomic_and_owner_scoped(setup):
     store.recover()
     assert store.claim_outbox() is None  # crash during send is uncertain, never resent
     assert (
-        store.db.execute("SELECT status FROM outbox WHERE id=?", (outgoing["id"],)).fetchone()[0]
+        store.db.execute("SELECT status FROM outbox WHERE id=%s", (outgoing["id"],)).fetchone()[0]
         == "uncertain"
     )
     with pytest.raises(ValueError):

@@ -10,7 +10,6 @@ from bot_wumtaaba.conversation import Conversation
 from bot_wumtaaba.main import create_app
 from bot_wumtaaba.mobile import apply_mobile_operation, digest, pairing_operation
 from bot_wumtaaba.portal import PortalConversation
-from bot_wumtaaba.store import Store
 
 OWNER = "22670000001"
 OTHER = "22670000002"
@@ -63,8 +62,8 @@ def operation(amount=20000, paid=10000, identifier="unique-payment"):
 
 
 @pytest.fixture
-def store():
-    s = Store(":memory:")
+def store(make_store):
+    s = make_store()
     save(s)
     yield s
     s.close()
@@ -89,7 +88,7 @@ def test_invalid_amount_rolls_back_inbox_and_balance(store, amount):
         commit(store, operation(amount=amount))
     assert store.get_agreement(OWNER, IDENTIFIER)["paid"] == 10000
     assert (
-        store.db.execute("SELECT status FROM inbox WHERE id=?", ("pay-1",)).fetchone()[0]
+        store.db.execute("SELECT status FROM inbox WHERE id=%s", ("pay-1",)).fetchone()[0]
         == "processing"
     )
     assert store.db.execute("SELECT COUNT(*) FROM outbox").fetchone()[0] == before
@@ -151,42 +150,22 @@ async def test_owner_cannot_select_foreign_agreement_and_ambiguous_search_requir
     )
 
 
-def test_persistence_and_legacy_settled_backfill(tmp_path):
-    path = tmp_path / "ledger.sqlite3"
-    s = Store(path)
+def test_persistence_of_ledger_after_reopening(make_store):
+    s = make_store()
     save(s)
     commit(s, operation())
     s.close()
-    s = Store(path)
-    assert s.get_agreement(OWNER, IDENTIFIER)["balance"] == 45000
-    assert len(s.payment_history(OWNER, IDENTIFIER)) == 2
-    s.close()
-    legacy = tmp_path / "legacy.sqlite3"
-    s = Store(legacy)
-    save(s)
-    with s.db:
-        for table in ["payments", "mobile_codes", "mobile_tokens"]:
-            s.db.execute("DROP TABLE " + table)
-        s.db.execute("DELETE FROM schema_migrations WHERE version=3")
-        s.db.execute("UPDATE calendar_events SET status='settled'")
-    s.close()
-    s = Store(legacy)
-    assert s.get_agreement(OWNER, IDENTIFIER)["balance"] == 0
-    assert [p["kind"] for p in s.payment_history(OWNER, IDENTIFIER)] == [
-        "initial",
-        "legacy_settlement",
-    ]
-    s.close()
-    s = Store(legacy)
-    assert len(s.payment_history(OWNER, IDENTIFIER)) == 2
-    assert (tmp_path / "legacy.sqlite3.pre-v3.sqlite3").exists()
-    s.close()
+    reopened = make_store()
+    assert reopened.get_agreement(OWNER, IDENTIFIER)["balance"] == 45000
+    assert len(reopened.payment_history(OWNER, IDENTIFIER)) == 2
 
 
 @pytest.fixture
-def api(tmp_path):
+def api(database):
     settings = Settings(
-        database_path=tmp_path / "api.sqlite3",
+        **database,
+        supabase_url="https://project.supabase.co",
+        supabase_api_key="test",
         public_access=True,
         whatsapp_token="test",
         meta_app_secret="test",
@@ -227,7 +206,7 @@ def test_mobile_one_time_code_expiration_revocation_no_cache_and_isolation(api):
     assert client.get("/mobile/v1/clients", headers=foreign).json()["items"] == []
     assert client.get("/mobile/v1/summary", headers=foreign).json()["balance"] == 0
     with store.db:
-        store.db.execute("UPDATE mobile_tokens SET expires_at=0 WHERE sender=?", (OWNER,))
+        store.db.execute("UPDATE mobile_tokens SET expires_at=0 WHERE sender=%s", (OWNER,))
     assert client.get("/mobile/v1/summary", headers=headers).status_code == 401
     headers, _ = session(client, store)
     assert client.delete("/mobile/v1/session", headers=headers).status_code == 204
@@ -336,15 +315,15 @@ def test_partial_payment_refreshes_already_queued_reminder(store, kind):
         reminder = store.db.execute("SELECT id FROM reminders LIMIT 1").fetchone()[0]
         out = store.queue_outbox(OWNER, payload)
         store.db.execute(
-            "UPDATE outbox SET category='reminder',reminder_id=? WHERE id=?", (reminder, out)
+            "UPDATE outbox SET category='reminder',reminder_id=%s WHERE id=%s", (reminder, out)
         )
         store.db.execute(
-            "UPDATE reminders SET status='queued',payload=?,outbox_id=? WHERE id=?",
+            "UPDATE reminders SET status='queued',payload=%s,outbox_id=%s WHERE id=%s",
             (json.dumps(payload), out, reminder),
         )
     commit(store, operation())
     updated = json.loads(
-        store.db.execute("SELECT content FROM outbox WHERE id=?", (out,)).fetchone()[0]
+        store.db.execute("SELECT content FROM outbox WHERE id=%s", (out,)).fetchone()[0]
     )
     if kind == "text":
         assert "45000 F CFA" in updated["text"]["body"]
@@ -376,7 +355,7 @@ def test_customer_search_keeps_full_totals_across_name_variants_and_accents(api)
     save(store, identifier="eeeeffffaaaa")
     with store.db:
         store.db.execute(
-            "UPDATE agreements SET client_name='Awa Ouédraogo' WHERE id=?", (IDENTIFIER,)
+            "UPDATE agreements SET client_name='Awa Ouédraogo' WHERE id=%s", (IDENTIFIER,)
         )
     headers, _ = session(client, store)
     rows = client.get("/mobile/v1/clients", params={"q": "ouedraogo"}, headers=headers).json()[

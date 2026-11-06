@@ -28,15 +28,15 @@ def pairing_operation(sender):
 def apply_mobile_operation(db, sender, operation):
     if operation["_operation"] == "mobile_pair":
         db.execute(
-            "DELETE FROM mobile_codes WHERE sender=? OR expires_at<=?", (sender, time.time())
+            "DELETE FROM mobile_codes WHERE sender=%s OR expires_at<=%s", (sender, time.time())
         )
         db.execute(
-            "INSERT INTO mobile_codes VALUES(?,?,?)",
+            "INSERT INTO mobile_codes VALUES(%s,%s,%s)",
             (operation["hash"], sender, operation["expires_at"]),
         )
     else:
-        db.execute("DELETE FROM mobile_codes WHERE sender=?", (sender,))
-        db.execute("DELETE FROM mobile_tokens WHERE sender=?", (sender,))
+        db.execute("DELETE FROM mobile_codes WHERE sender=%s", (sender,))
+        db.execute("DELETE FROM mobile_tokens WHERE sender=%s", (sender,))
 
 
 def install_mobile(app):
@@ -51,7 +51,7 @@ def install_mobile(app):
         store = request.app.state.store
         with store.lock:
             row = store.db.execute(
-                "SELECT sender FROM mobile_tokens WHERE hash=? AND expires_at>?",
+                "SELECT sender FROM mobile_tokens WHERE hash=%s AND expires_at>%s",
                 (digest(value[7:]), time.time()),
             ).fetchone()
         if not row:
@@ -83,23 +83,22 @@ def install_mobile(app):
         store = request.app.state.store
         token = secrets.token_urlsafe(32)
         with store.lock, store.db:
-            store.db.execute("BEGIN IMMEDIATE")
             row = store.db.execute(
-                "SELECT sender FROM mobile_codes WHERE hash=? AND expires_at>?", (digest(code), now)
+                "SELECT sender FROM mobile_codes WHERE hash=%s AND expires_at>%s FOR UPDATE", (digest(code), now)
             ).fetchone()
             if not row:
                 raise HTTPException(401, "Code invalide ou expiré.")
-            store.db.execute("DELETE FROM mobile_codes WHERE hash=?", (digest(code),))
-            store.db.execute("DELETE FROM mobile_tokens WHERE expires_at<=?", (now,))
+            store.db.execute("DELETE FROM mobile_codes WHERE hash=%s", (digest(code),))
+            store.db.execute("DELETE FROM mobile_tokens WHERE expires_at<=%s", (now,))
             # Keep at most five devices per merchant.
             old = store.db.execute(
-                "SELECT hash FROM mobile_tokens WHERE sender=? ORDER BY expires_at DESC LIMIT -1 OFFSET 4",
+                "SELECT hash FROM mobile_tokens WHERE sender=%s ORDER BY expires_at DESC OFFSET 4",
                 (row[0],),
             ).fetchall()
             for expired in old:
-                store.db.execute("DELETE FROM mobile_tokens WHERE hash=?", (expired[0],))
+                store.db.execute("DELETE FROM mobile_tokens WHERE hash=%s", (expired[0],))
             store.db.execute(
-                "INSERT INTO mobile_tokens VALUES(?,?,?)", (digest(token), row[0], now + 30 * 86400)
+                "INSERT INTO mobile_tokens VALUES(%s,%s,%s)", (digest(token), row[0], now + 30 * 86400)
             )
         return {"token": token, "sender": row[0], "expires_at": now + 30 * 86400}
 
@@ -109,7 +108,7 @@ def install_mobile(app):
         store = request.app.state.store
         with store.lock, store.db:
             store.db.execute(
-                "DELETE FROM mobile_tokens WHERE hash=?",
+                "DELETE FROM mobile_tokens WHERE hash=%s",
                 (digest(request.headers["authorization"][7:]),),
             )
         return Response(status_code=204)
@@ -122,9 +121,9 @@ def install_mobile(app):
             row = store.db.execute(
                 f"SELECT COUNT(*) AS agreements,COUNT(DISTINCT {CLIENT_KEY}) AS clients,"
                 "COALESCE(SUM(total),0) AS total,COALESCE(SUM(paid),0) AS paid,"
-                "COALESCE(SUM(MAX(total-paid,0)),0) AS balance,"
-                "COALESCE(SUM(CASE WHEN total>paid AND due_date<date('now') THEN 1 ELSE 0 END),0) AS overdue "
-                "FROM agreements a WHERE sender=?",
+                "COALESCE(SUM(GREATEST(total-paid,0)),0) AS balance,"
+                "COALESCE(SUM(CASE WHEN total>paid AND due_date<CURRENT_DATE::text THEN 1 ELSE 0 END),0) AS overdue "
+                "FROM agreements a WHERE sender=%s",
                 (sender,),
             ).fetchone()
         return {**dict(row), "sender": sender, "updated_at": time.time()}
@@ -139,11 +138,11 @@ def install_mobile(app):
             rows = store.db.execute(
                 f"SELECT {CLIENT_KEY} AS id,MAX(a.client_name) AS name,"
                 "MAX(a.client_phone) AS phone,COUNT(*) AS agreements,SUM(a.total) AS total,"
-                "SUM(a.paid) AS paid,SUM(MAX(a.total-a.paid,0)) AS balance "
-                "FROM agreements a WHERE sender=? GROUP BY 1 "
-                "HAVING MAX(CASE WHEN instr(search_fold(COALESCE(client_name,'')),search_fold(?))>0 "
-                "OR instr(COALESCE(client_phone,''),?)>0 THEN 1 ELSE 0 END)=1 "
-                "ORDER BY balance DESC,id LIMIT 26 OFFSET ?",
+                "SUM(a.paid) AS paid,SUM(GREATEST(a.total-a.paid,0)) AS balance "
+                "FROM agreements a WHERE sender=%s GROUP BY 1 "
+                "HAVING MAX(CASE WHEN strpos(search_fold(COALESCE(client_name,'')),search_fold(%s))>0 "
+                "OR strpos(COALESCE(client_phone,''),%s)>0 THEN 1 ELSE 0 END)=1 "
+                "ORDER BY balance DESC,id LIMIT 26 OFFSET %s",
                 (sender, q, q, (page - 1) * 25),
             ).fetchall()
         return {"items": [dict(row) for row in rows[:25]], "has_more": len(rows) > 25, "page": page}
@@ -161,13 +160,13 @@ def install_mobile(app):
         with store.lock:
             rows = store.db.execute(
                 f"SELECT a.id,a.reference,a.client_name AS client,a.client_phone,"
-                "a.product,a.total,a.paid,MAX(a.total-a.paid,0) AS balance,a.due_date,a.created_at,"
-                f"{CLIENT_KEY} AS client_id FROM agreements a WHERE a.sender=? "
-                "AND (instr(search_fold(COALESCE(a.client_name,'')||' '||COALESCE(a.product,'')||' '||COALESCE(a.reference,'')),search_fold(?))>0) "
-                f"AND (?='' OR {CLIENT_KEY}=?) "
-                "AND (?='all' OR (?='open' AND a.total>a.paid) OR (?='settled' AND a.total=a.paid) "
-                "OR (?='overdue' AND a.total>a.paid AND a.due_date<date('now'))) "
-                "ORDER BY a.created_at DESC,a.id LIMIT 26 OFFSET ?",
+                "a.product,a.total,a.paid,GREATEST(a.total-a.paid,0) AS balance,a.due_date,a.created_at,"
+                f"{CLIENT_KEY} AS client_id FROM agreements a WHERE a.sender=%s "
+                "AND (strpos(search_fold(COALESCE(a.client_name,'')||' '||COALESCE(a.product,'')||' '||COALESCE(a.reference,'')),search_fold(%s))>0) "
+                f"AND (%s='' OR {CLIENT_KEY}=%s) "
+                "AND (%s='all' OR (%s='open' AND a.total>a.paid) OR (%s='settled' AND a.total=a.paid) "
+                "OR (%s='overdue' AND a.total>a.paid AND a.due_date<CURRENT_DATE::text)) "
+                "ORDER BY a.created_at DESC,a.id LIMIT 26 OFFSET %s",
                 (sender, q, client, client, status, status, status, status, (page - 1) * 25),
             ).fetchall()
         return {"items": [dict(row) for row in rows[:25]], "has_more": len(rows) > 25, "page": page}

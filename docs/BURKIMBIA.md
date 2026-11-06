@@ -98,6 +98,8 @@ GRANT USAGE ON SCHEMA wuumtaaba TO wuumtaaba_mac;
 GRANT SELECT, UPDATE (last_seen) ON wuumtaaba.mac_link TO wuumtaaba_mac;
 ```
 
+La sécurité par ligne (RLS) est active sur toutes les tables du schéma : la règle `mac_connector`, créée par le bot au démarrage, laisse ce rôle accéder à la ligne de `mac_link`. Sans elle, ses requêtes ne verraient aucune ligne et le bot le croirait hors ligne.
+
 Il passe par le pooler en mode session, `postgresql://wuumtaaba_mac.iagyxtstnbgstdyppgnp:…@aws-1-eu-west-3.pooler.supabase.com:5432/postgres?sslmode=require`, avec deux requêtes :
 
 ```sql

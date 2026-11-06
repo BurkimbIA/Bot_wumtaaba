@@ -4,6 +4,8 @@ Après la bascule Supabase de la version 0.7, les données vivent dans Postgres 
 
 Le bot crée le schéma et ses tables au démarrage (`src/bot_wumtaaba/schema.sql`, instructions `IF NOT EXISTS`). Les tables et colonnes sont celles de la base SQLite V2 ; les dates restent en secondes depuis 1970 et le JSON en texte.
 
+Toutes les tables du schéma ont la sécurité par ligne (RLS), activée par le bot au démarrage. Le bot en est propriétaire et n’est pas concerné ; tout autre rôle ne voit aucune ligne sans règle, même si le schéma était un jour ouvert à l’API REST. La seule règle, `mac_connector`, laisse le rôle du connecteur Mac lire la ligne de `mac_link` et y écrire `last_seen` (voir `BURKIMBIA.md`).
+
 `DATABASE_URL` pointe vers le pooler de session Supabase (`aws-1-eu-west-3.pooler.supabase.com`, port 5432), joignable en IPv4. L’hôte direct `db.iagyxtstnbgstdyppgnp.supabase.co` n’a qu’une adresse IPv6 : il marche depuis Fly.io, pas depuis un poste sans IPv6. Ne pas utiliser le pooler de transaction (port 6543) : le bot fixe le `search_path` une fois par connexion.
 
 | Tables | Données |

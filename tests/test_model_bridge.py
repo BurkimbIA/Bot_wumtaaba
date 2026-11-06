@@ -3,8 +3,10 @@ import json
 import time
 
 import httpx
+import psycopg
 import pytest
 from fastapi import FastAPI, HTTPException
+from psycopg import sql
 
 from bot_wumtaaba.clients import MediaError
 from bot_wumtaaba.model_bridge import ModelBridge, install_bridge
@@ -102,6 +104,29 @@ def test_restart_forgets_a_stale_request(make_store):
     store.db.execute("UPDATE mac_link SET wanted_until = extract(epoch FROM now()) + 300")
     ModelBridge(store, SECRET)
     assert not wanted(store)
+
+
+def test_row_level_security_everywhere_still_lets_the_mac_role_beat(store, database):
+    rls = store.db.execute(
+        "SELECT bool_and(relrowsecurity) FROM pg_class "
+        "WHERE relnamespace = current_schema()::regnamespace AND relkind = 'r'"
+    ).fetchone()[0]
+    assert rls is True
+    mac_link = sql.Identifier(database["database_schema"], "mac_link")
+    with psycopg.connect(database["database_url"], autocommit=True) as admin:
+        admin.execute(
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'wuumtaaba_mac') "
+            "THEN CREATE ROLE wuumtaaba_mac; END IF; END $$"
+        )
+        # The grants documented in docs/BURKIMBIA.md, on this test's schema.
+        admin.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO wuumtaaba_mac").format(
+            sql.Identifier(database["database_schema"])))
+        admin.execute(sql.SQL("GRANT SELECT, UPDATE (last_seen) ON {} TO wuumtaaba_mac").format(mac_link))
+        admin.execute("SET ROLE wuumtaaba_mac")
+        beat = admin.execute(sql.SQL(
+            "UPDATE {} SET last_seen = extract(epoch FROM now()) WHERE id = 1").format(mac_link))
+        assert beat.rowcount == 1
+        assert admin.execute(sql.SQL("SELECT count(*) FROM {}").format(mac_link)).fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("secret", ["", "too-short"])

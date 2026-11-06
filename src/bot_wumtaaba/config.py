@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,13 +19,18 @@ class Settings(BaseSettings):
     transcription_model: str = "gemini-3.8-flash"
     extraction_model: str = "gemini-3.8-flash"
     french_tts_model: str = "gemini-3.1-flash-tts-preview"
-    database_path: Path = Path("data/bot.sqlite3")
+    database_url: SecretStr = SecretStr("")
+    database_schema: str = "wuumtaaba"
+    supabase_url: str = ""
+    supabase_api_key: SecretStr = SecretStr("")
+    media_bucket: str = "wuumtaaba-media"
+    # 0 = never; on Fly the bot stops itself once idle, and the next request starts it again.
+    idle_shutdown_seconds: int = Field(default=0, ge=0)
     public_access: bool = False
     allowed_senders: str = ""
     max_audio_bytes: int = Field(default=14_000_000, ge=1024, le=14_000_000)
     max_messages_per_hour: int = Field(default=30, ge=1)
     retention_days: int = Field(default=0, ge=0)
-    media_directory: Path = Path("data/media")
     reminder_enabled: bool = True
     reminder_template_name: str = ""
     reminder_template_language: str = "fr"
@@ -41,8 +44,11 @@ class Settings(BaseSettings):
 
     def validate_live(self) -> None:
         missing = [key for key in (
-            "whatsapp_token", "meta_app_secret", "webhook_verify_token", "gemini_api_key"
+            "whatsapp_token", "meta_app_secret", "webhook_verify_token", "gemini_api_key",
+            "database_url", "supabase_api_key",
         ) if not getattr(self, key).get_secret_value()]
+        if not self.supabase_url.startswith("https://"):
+            missing.append("supabase_url")
         if not self.whatsapp_phone_number_id.isdigit():
             missing.append("whatsapp_phone_number_id")
         if (not self.public_access and not self.senders) or not all(s.isdigit() for s in self.senders):

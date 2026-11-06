@@ -29,7 +29,7 @@ class _Job:
 
 
 class ModelBridge:
-    """One event loop owns all jobs; SQLite stores only the selected provider."""
+    """One event loop owns all jobs; the database stores only the selected provider."""
 
     def __init__(self, store, secret, timeout=330):
         self.store = store
@@ -43,16 +43,6 @@ class ModelBridge:
         self._last_seen = None
         self._last_seen_monotonic = None
         self._jobs: dict[str, _Job] = {}
-        with store.lock, store.db:
-            store.db.execute(
-                "CREATE TABLE IF NOT EXISTS app_model_config ("
-                "id INTEGER PRIMARY KEY CHECK(id=1), provider TEXT NOT NULL "
-                "CHECK(provider IN ('cloud','mac')), updated_at REAL NOT NULL)"
-            )
-            store.db.execute(
-                "INSERT OR IGNORE INTO app_model_config(id,provider,updated_at) VALUES(1,'cloud',?)",
-                (time.time(),),
-            )
 
     @property
     def configured(self):
@@ -81,7 +71,7 @@ class ModelBridge:
             previous = self.provider
             if previous != provider:
                 now = time.time()
-                self.store.db.execute("UPDATE app_model_config SET provider=?,updated_at=? WHERE id=1",
+                self.store.db.execute("UPDATE app_model_config SET provider=%s,updated_at=%s WHERE id=1",
                                       (provider, now))
                 self.store._audit("model_provider_changed", provider,
                                   {"previous": previous, "provider": provider, "changed_at": now})

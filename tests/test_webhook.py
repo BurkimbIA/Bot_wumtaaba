@@ -10,11 +10,10 @@ from fastapi.testclient import TestClient
 
 from bot_wumtaaba.config import Settings
 from bot_wumtaaba.main import create_app, process_once
-from bot_wumtaaba.store import Store
 
 
 @pytest.fixture
-def settings(tmp_path):
+def settings(database):
     return Settings(
         _env_file=None,
         whatsapp_token="test-meta",
@@ -23,7 +22,9 @@ def settings(tmp_path):
         gemini_api_key="test-ai",
         whatsapp_phone_number_id="123",
         allowed_senders="22670000000",
-        database_path=tmp_path / "test.sqlite3",
+        supabase_url="https://project.supabase.co",
+        supabase_api_key="test",
+        **database,
     )
 
 
@@ -120,8 +121,8 @@ def test_hourly_limit(settings):
 
 
 @pytest.mark.asyncio
-async def test_worker_transaction_and_send(tmp_path):
-    store = Store(tmp_path / "db")
+async def test_worker_transaction_and_send(make_store):
+    store = make_store()
     store.enqueue("id", "user", {"type": "text"})
     conversation = AsyncMock()
     conversation.handle.return_value = ({}, [{"type": "text", "text": {"body": "ok"}}], None)
@@ -134,8 +135,8 @@ async def test_worker_transaction_and_send(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_send_never_auto_retried(tmp_path):
-    store = Store(tmp_path / "db")
+async def test_ambiguous_send_never_auto_retried(make_store):
+    store = make_store()
     store.enqueue("id", "user", {"type": "text"})
     conversation = AsyncMock()
     conversation.handle.return_value = ({}, [{"type": "text", "text": {"body": "ok"}}], None)
@@ -149,8 +150,8 @@ async def test_ambiguous_send_never_auto_retried(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_old_incoming_never_processed_after_restart(tmp_path):
-    store = Store(tmp_path / "db")
+async def test_old_incoming_never_processed_after_restart(make_store):
+    store = make_store()
     store.enqueue("old", "user", {"timestamp": str(int(time.time()) - 86400)})
     conversation, whatsapp = AsyncMock(), AsyncMock()
     await process_once(store, conversation, whatsapp)
@@ -160,23 +161,22 @@ async def test_old_incoming_never_processed_after_restart(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_provider_outage_after_three_attempts_notifies_user(tmp_path):
-    store = Store(tmp_path / "db")
+async def test_provider_outage_after_three_attempts_notifies_user(make_store):
+    store = make_store()
     store.enqueue("failure", "user", {"type": "audio"})
     conversation, whatsapp = AsyncMock(), AsyncMock()
     conversation.handle.side_effect = httpx.ReadTimeout("provider unavailable")
     whatsapp.send.return_value = "error-notice"
     for _ in range(3):
         store.db.execute("UPDATE inbox SET available_at=0")
-        store.db.commit()
         await process_once(store, conversation, whatsapp)
     assert whatsapp.send.await_count == 1
     assert "indisponible" in whatsapp.send.call_args.args[1]["text"]["body"]
     store.close()
 
 
-def test_outbox_expiry_based_on_whatsapp_timestamp(tmp_path):
-    store = Store(tmp_path / "db")
+def test_outbox_expiry_based_on_whatsapp_timestamp(make_store):
+    store = make_store()
     original_time = int(time.time()) - 7200
     store.enqueue("id", "user", {"timestamp": str(original_time)})
     store.claim_inbox()
@@ -190,7 +190,7 @@ def test_v2_archives_ignored_and_delivery_callbacks(settings):
         post(client, payload(sender="22670000099", msg_id="unknown"))
         store = client.app.state.store
         row = store.db.execute("SELECT status,text FROM messages WHERE id='in:unknown'").fetchone()
-        assert tuple(row) == ("ignored", "menu")
+        assert tuple(row.values()) == ("ignored", "menu")
         data = payload()
         value = data["entry"][0]["changes"][0]["value"]
         value.pop("messages")
@@ -214,8 +214,8 @@ def test_optout_not_lost_to_hourly_limit(settings, command):
 
 
 @pytest.mark.asyncio
-async def test_global_disabled_blocks_already_queued_reminder(tmp_path, settings):
-    store = Store(tmp_path / "disabled.sqlite3")
+async def test_global_disabled_blocks_already_queued_reminder(settings, make_store):
+    store = make_store()
     store.enqueue("request", "22670000000", {"type": "text"})
     store.claim_inbox()
     store.finish_inbox("request", "22670000000", {}, [{"type": "text", "text": {"body": "rappel"}}])

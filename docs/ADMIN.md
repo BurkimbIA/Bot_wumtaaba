@@ -1,6 +1,6 @@
 # Back-office administrateur
 
-Le back-office est disponible à `/admin` sur le même service Fly.io. Il utilise directement la base SQLite du bot, sans copie de données ni dépendance à un autre hébergement.
+Le back-office est disponible à `/admin` sur le même service Fly.io. Il lit directement la base Postgres du bot, sans copie de données ; les audios sont lus dans le bucket privé Supabase par le serveur, jamais par une URL publique.
 
 Quatre vues :
 

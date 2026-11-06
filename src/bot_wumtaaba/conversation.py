@@ -15,8 +15,9 @@ from .mobile import pairing_operation
 
 
 class Conversation:
-    def __init__(self, settings, whatsapp, intelligence, store, burkimbia=None):
+    def __init__(self, settings, whatsapp, intelligence, store, media=None, burkimbia=None):
         self.settings = settings
+        self.media = media
         self.whatsapp = whatsapp
         self.intelligence = intelligence
         self.store = store
@@ -345,8 +346,8 @@ class Conversation:
                 )
             try:
                 audio = await self.whatsapp.audio(pending["id"])
-                metadata = archive_audio(
-                    self.settings.media_directory, pending["message_id"], audio[0], audio[2]
+                metadata = await archive_audio(
+                    self.media, pending["message_id"], audio[0], audio[2]
                 )
                 language = pending.get("language", "french")
                 metadata.update(
@@ -567,8 +568,8 @@ class Conversation:
                 spoken = source
                 audio = await self.intelligence.synthesize_french(spoken)
                 provider = "gemini"
-            metadata = archive_audio(
-                self.settings.media_directory, message.get("id") or uuid4().hex, audio[0], audio[2]
+            metadata = await archive_audio(
+                self.media, message.get("id") or uuid4().hex, audio[0], audio[2]
             )
             metadata.update(
                 {

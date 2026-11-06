@@ -18,6 +18,7 @@ from .clients import Intelligence, MediaError, WhatsApp
 from .config import Settings
 from .conversation import Conversation
 from .domain import text
+from .media import MediaStore
 from .mobile import install_mobile
 from .model_bridge import ModelBridge, install_bridge
 from .portal import PortalConversation
@@ -146,7 +147,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app):
         settings.validate_live()
-        store = Store(settings.database_path)
+        store = Store(settings.database_url.get_secret_value(), settings.database_schema)
         store.recover()
         store.purge(settings.retention_days)
         app.state.store = store
@@ -155,13 +156,15 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         )
         async with httpx.AsyncClient(timeout=30, follow_redirects=False) as http:
             whatsapp = WhatsApp(settings, http)
+            app.state.media = media = MediaStore(settings, http)
             burkimbia = BurkimbIA(settings, http, app.state.model_bridge)
-            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store, burkimbia)
-            conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy)
+            legacy = Conversation(settings, whatsapp, Intelligence(settings, http), store, media, burkimbia)
+            conversation = PortalConversation(settings, whatsapp, burkimbia, store, legacy, media)
 
             async def worker():
                 last_purge = time.monotonic()
                 last_schedule = 0
+                last_busy = time.monotonic()
                 while True:
                     try:
                         if time.monotonic() - last_purge > 3600:
@@ -171,14 +174,25 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                             queue_due_reminders(store, settings)
                             last_schedule = time.monotonic()
                         busy = await process_once(store, conversation, whatsapp, settings=settings)
-                        if not busy:
-                            await asyncio.sleep(0.5)
+                        if busy:
+                            last_busy = time.monotonic()
+                            continue
+                        idle = time.monotonic() - max(last_busy, app.state.last_request)
+                        shutdown = getattr(app.state, "request_shutdown", None)
+                        if (shutdown and settings.idle_shutdown_seconds and idle > settings.idle_shutdown_seconds
+                                and not store.has_pending_work()):
+                            # Exit 0 stops the Fly machine; the next webhook or wake-up starts it.
+                            logger.warning("idle_shutdown idle_seconds=%d", idle)
+                            shutdown()
+                            return
+                        await asyncio.sleep(0.5)
                     except asyncio.CancelledError:
                         raise
                     except Exception as exc:  # noqa: BLE001 — frontière worker, logs sans données
                         logger.error("worker_error kind=%s", type(exc).__name__)
                         await asyncio.sleep(2)
 
+            app.state.last_request = time.monotonic()
             task = asyncio.create_task(worker()) if run_worker else None
             app.state.worker = task
             try:
@@ -198,6 +212,13 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+
+    @app.middleware("http")
+    async def track_activity(request, call_next):
+        # Fly health checks must not keep an idle machine awake.
+        if request.url.path != "/healthz":
+            app.state.last_request = time.monotonic()
+        return await call_next(request)
 
     @app.get("/healthz")
     async def health():
@@ -263,7 +284,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                 store.archive_message(message, status="ignored", reason="rate_limited")
                 continue
             store.enqueue(message_id, sender, message)
-        # Accuser réception seulement après écriture durable en SQLite.
+        # Accuser réception seulement après écriture durable en base.
         return {"status": "accepted"}
 
     install_bridge(app, lambda: app.state.model_bridge)

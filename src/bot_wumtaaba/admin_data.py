@@ -3,7 +3,6 @@
 import math
 import re
 import time
-from pathlib import Path
 
 PAGE_SIZE = 25
 
@@ -21,7 +20,7 @@ def _page(store, select, count, params, page):
             page = max(1, min(int(page), pages))
         except (ValueError, TypeError, OverflowError):
             page = 1
-        rows = store.db.execute(select + " LIMIT ? OFFSET ?", (*params, PAGE_SIZE, (page - 1) * PAGE_SIZE))
+        rows = store.db.execute(select + " LIMIT %s OFFSET %s", (*params, PAGE_SIZE, (page - 1) * PAGE_SIZE))
         return {"items": [dict(row) for row in rows], "page": page, "pages": pages, "total": total}
 
 
@@ -31,7 +30,7 @@ def overview(store):
             SELECT (SELECT COUNT(*) FROM contacts) contacts,
               (SELECT COUNT(*) FROM agreements) agreements,
               (SELECT COUNT(*) FROM calendar_events WHERE status='open') open_agreements,
-              (SELECT COALESCE(SUM(MAX(COALESCE(a.total,0)-COALESCE(a.paid,0),0)),0)
+              (SELECT COALESCE(SUM(GREATEST(COALESCE(a.total,0)-COALESCE(a.paid,0),0)),0)::bigint
                  FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id
                  WHERE COALESCE(e.status,'open')='open') balance,
               (SELECT COUNT(*) FROM messages WHERE type='audio') audios,
@@ -40,8 +39,8 @@ def overview(store):
               (SELECT COUNT(*) FROM messages WHERE status IN ('failed','uncertain')) failed_messages
         """).fetchone())
         activity = [dict(row) for row in store.db.execute(
-            "SELECT date(occurred_at,'unixepoch') day,COUNT(*) count FROM messages "
-            "WHERE occurred_at>=? GROUP BY day ORDER BY day", (time.time() - 14 * 86400,)
+            "SELECT to_char(to_timestamp(occurred_at) AT TIME ZONE 'UTC','YYYY-MM-DD') AS day,COUNT(*) count FROM messages "
+            "WHERE occurred_at>=%s GROUP BY day ORDER BY day", (time.time() - 14 * 86400,)
         )]
         recent = [dict(row) for row in store.db.execute(
             "SELECT id,direction,type,status,substr(text,1,300) text,occurred_at,conversation_id "
@@ -51,10 +50,10 @@ def overview(store):
 
 
 def agreements(store, q="", page=1, sender=""):
-    where = " WHERE a.reference LIKE ? ESCAPE '\\' OR a.client_name LIKE ? ESCAPE '\\' OR a.client_phone LIKE ? ESCAPE '\\' OR a.sender LIKE ? ESCAPE '\\'"
+    where = " WHERE a.reference LIKE %s ESCAPE '\\' OR a.client_name LIKE %s ESCAPE '\\' OR a.client_phone LIKE %s ESCAPE '\\' OR a.sender LIKE %s ESCAPE '\\'"
     params = (_search(q),) * 4
     if sender:
-        where = " WHERE (" + where.removeprefix(" WHERE ") + ") AND a.sender=?"
+        where = " WHERE (" + where.removeprefix(" WHERE ") + ") AND a.sender=%s"
         params += (sender,)
     return _page(store,
                  "SELECT a.id,a.reference,a.client_name,a.client_phone,a.sender,a.total,a.paid,a.due_date,"
@@ -66,11 +65,11 @@ def agreements(store, q="", page=1, sender=""):
 
 def agreement_sellers(store, q="", page=1):
     """Paginate sellers before loading their agreements, never split a seller group."""
-    where = " WHERE a.reference LIKE ? ESCAPE '\\' OR a.client_name LIKE ? ESCAPE '\\' OR a.client_phone LIKE ? ESCAPE '\\' OR a.sender LIKE ? ESCAPE '\\'"
+    where = " WHERE a.reference LIKE %s ESCAPE '\\' OR a.client_name LIKE %s ESCAPE '\\' OR a.client_phone LIKE %s ESCAPE '\\' OR a.sender LIKE %s ESCAPE '\\'"
     return _page(store,
-                 "SELECT a.sender,COUNT(*) agreement_count,COALESCE(SUM(a.total),0) total_amount,"
+                 "SELECT a.sender,COUNT(*) agreement_count,COALESCE(SUM(a.total),0)::bigint total_amount,"
                  "COALESCE(SUM(CASE WHEN COALESCE(e.status,'open')='open' "
-                 "THEN MAX(COALESCE(a.total,0)-COALESCE(a.paid,0),0) ELSE 0 END),0) balance "
+                 "THEN GREATEST(COALESCE(a.total,0)-COALESCE(a.paid,0),0) ELSE 0 END),0)::bigint balance "
                  "FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id" + where +
                  " GROUP BY a.sender ORDER BY MAX(a.created_at) DESC,a.sender",
                  "SELECT COUNT(DISTINCT a.sender) FROM agreements a" + where,
@@ -78,7 +77,7 @@ def agreement_sellers(store, q="", page=1):
 
 
 def conversations(store, q="", page=1):
-    where = " WHERE c.id LIKE ? ESCAPE '\\'"
+    where = " WHERE c.id LIKE %s ESCAPE '\\'"
     return _page(store,
                  "SELECT c.id,c.last_inbound_at,(SELECT COUNT(*) FROM messages m WHERE m.conversation_id=c.id) message_count,"
                  "(SELECT substr(m.text,1,300) FROM messages m WHERE m.conversation_id=c.id ORDER BY m.occurred_at DESC,m.id DESC LIMIT 1) last_text "
@@ -90,13 +89,13 @@ def conversation(store, phone):
     if not isinstance(phone, str) or not re.fullmatch(r"[0-9]{7,15}", phone):
         return None
     with store.lock:
-        if not store.db.execute("SELECT 1 FROM conversations WHERE id=?", (phone,)).fetchone():
+        if not store.db.execute("SELECT 1 FROM conversations WHERE id=%s", (phone,)).fetchone():
             return None
         rows = store.db.execute(
             "SELECT m.id,m.direction,m.type,m.text,m.status,m.occurred_at,"
             "a.storage_path,a.transcript,a.mime_type,a.message_id media_id "
             "FROM messages m LEFT JOIN media_assets a ON a.message_id=m.id "
-            "WHERE m.conversation_id=? ORDER BY m.occurred_at DESC,m.id DESC LIMIT 201", (phone,)
+            "WHERE m.conversation_id=%s ORDER BY m.occurred_at DESC,m.id DESC LIMIT 201", (phone,)
         ).fetchall()
     messages = []
     for row in reversed(rows[:200]):
@@ -112,7 +111,7 @@ def conversation(store, phone):
 
 
 def reminders(store, status="", page=1):
-    where = " WHERE r.status=?" if status else ""
+    where = " WHERE r.status=%s" if status else ""
     params = (str(status)[:50],) if status else ()
     return _page(store,
                  "SELECT r.id,a.reference,r.recipient,r.role,r.scheduled_at,r.status FROM reminders r "
@@ -121,21 +120,15 @@ def reminders(store, status="", page=1):
                  "SELECT COUNT(*) FROM reminders r" + where, params, page)
 
 
-def media_file(store, message_id, media_directory):
+def media_file(store, message_id):
     if not isinstance(message_id, str) or len(message_id) > 512:
         return None
     with store.lock:
-        row = store.db.execute("SELECT storage_path,mime_type FROM media_assets WHERE message_id=?", (message_id,)).fetchone()
-    if not row or not row["storage_path"]:
-        return None
-    try:
-        base = Path(media_directory).resolve(strict=True)
-        file = (base / row["storage_path"]).resolve(strict=True)
-        if not file.is_relative_to(base) or not file.is_file():
-            return None
-    except (OSError, RuntimeError, ValueError):
+        row = store.db.execute("SELECT storage_path,mime_type FROM media_assets WHERE message_id=%s", (message_id,)).fetchone()
+    # Only names the archive generates reach the bucket URL: no path from the database is trusted.
+    if not row or not re.fullmatch(r"[0-9a-f]{64}\.audio", row["storage_path"] or ""):
         return None
     # A corrupted MIME value must not turn a private media download into executable HTML.
     mime = row["mime_type"] or ""
     allowed = {"audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/x-wav", "audio/aac", "audio/amr", "audio/webm"}
-    return file, mime if mime in allowed else "application/octet-stream"
+    return row["storage_path"], mime if mime in allowed else "application/octet-stream"

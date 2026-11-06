@@ -51,7 +51,9 @@ class Draft(BaseModel):
     def summary(self) -> str:
         if self.question():
             raise ValueError("Accord incomplet")
-        money = lambda n: f"{n:,}".replace(",", " ") + " F CFA"
+        def money(n):
+            return f"{n:,}".replace(",", " ") + " F CFA"
+
         return (
             f"*Accord à vérifier*\nClient : {self.client}\nProduit : {self.product}\n"
             f"Téléphone client : {self.client_phone or 'non renseigné'}\n"

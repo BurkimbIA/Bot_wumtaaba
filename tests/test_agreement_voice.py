@@ -11,7 +11,6 @@ from bot_wumtaaba.clients import Intelligence, MediaError
 from bot_wumtaaba.config import Settings
 from bot_wumtaaba.conversation import Conversation
 from bot_wumtaaba.domain import Draft
-from bot_wumtaaba.store import Store
 
 
 def msg(body):
@@ -23,9 +22,9 @@ def click(action):
 
 
 @pytest.fixture
-def setup(tmp_path):
-    settings = Settings(public_access=True, media_directory=tmp_path / "media")
-    store = Store(":memory:")
+def setup(make_store, media):
+    settings = Settings(public_access=True)
+    store = make_store()
     wa, ai, bia = AsyncMock(), AsyncMock(), AsyncMock()
     draft = Draft(client="Awa", product="Riz", total=30000, paid=10000, due_date="2026-12-20")
     ai.extract.return_value = draft
@@ -37,7 +36,7 @@ def setup(tmp_path):
     wa.audio.return_value = (b"voice", "voice.ogg", "audio/ogg")
     wa.upload_audio.return_value = "987654"
     yield SimpleNamespace(
-        bot=Conversation(settings, wa, ai, store, bia),
+        bot=Conversation(settings, wa, ai, store, media, bia),
         store=store,
         wa=wa,
         ai=ai,

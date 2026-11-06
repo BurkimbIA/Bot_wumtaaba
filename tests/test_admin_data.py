@@ -5,14 +5,13 @@ import time
 import pytest
 
 from bot_wumtaaba import admin_data
-from bot_wumtaaba.store import Store
 
 PHONE = "22670000000"
 
 
 @pytest.fixture
-def store():
-    value = Store(":memory:")
+def store(make_store):
+    value = make_store()
     yield value
     value.close()
 
@@ -82,38 +81,31 @@ def test_reminders_status_filter(store):
     assert admin_data.reminders(store, "' OR 1=1 --")["total"] == 0
 
 
-def test_media_projection_and_containment(store, tmp_path):
+def test_media_projection_and_containment(store):
     store.enqueue("audio", PHONE, {"type": "audio", "audio": {"id": "private"}})
-    base = tmp_path / "media"
-    base.mkdir()
-    audio = base / "one.audio"
-    audio.write_bytes(b"audio")
-    store.record_media("audio", {"storage_path": "one.audio", "mime_type": "audio/ogg"}, "Bonjour")
-    assert admin_data.media_file(store, "in:audio", base) == (audio, "audio/ogg")
+    name = "b" * 64 + ".audio"
+    store.record_media("audio", {"storage_path": name, "mime_type": "audio/ogg"}, "Bonjour")
+    assert admin_data.media_file(store, "in:audio") == (name, "audio/ogg")
     message = admin_data.conversation(store, PHONE)["messages"][0]
     assert message["media"] == {"available": True, "transcript": "Bonjour", "mime_type": "audio/ogg"}
     assert "storage_path" not in str(message) and "private" not in str(message)
-    outside = tmp_path / "secret"
-    outside.write_text("secret")
-    for path in ("../secret", str(outside), "escape"):
-        if path == "escape":
-            (base / path).symlink_to(outside)
+    # Only generated names reach the bucket URL.
+    for path in ("../secret", "/etc/passwd", "b" * 64, "B" * 64 + ".audio", "../" + name, ""):
         store.record_media("audio", {"storage_path": path})
-        assert admin_data.media_file(store, "in:audio", base) is None
-    store.record_media("audio", {"storage_path": "one.audio", "mime_type": "text/html"})
-    assert admin_data.media_file(store, "in:audio", base)[1] == "application/octet-stream"
-    assert admin_data.media_file(store, "unknown", base) is None
-    audio.unlink()
-    assert admin_data.media_file(store, "in:audio", base) is None
+        assert admin_data.media_file(store, "in:audio") is None
+    store.record_media("audio", {"storage_path": name, "mime_type": "text/html"})
+    assert admin_data.media_file(store, "in:audio")[1] == "application/octet-stream"
+    assert admin_data.media_file(store, "unknown") is None
 
 
 def test_all_queries_are_read_only(store):
     seed(store)
-    before = store.db.total_changes
+    # Any write raises in a read-only session.
+    store.db.execute("SET default_transaction_read_only = on")
     for function in (admin_data.overview, admin_data.agreements, admin_data.conversations, admin_data.reminders):
         function(store)
     admin_data.conversation(store, PHONE)
-    assert store.db.total_changes == before
+    store.db.execute("SET default_transaction_read_only = off")
 
 
 def test_activity_uses_recent_period(store):

@@ -201,6 +201,24 @@ async def test_timeout_removes_job_and_rejects_late_completion(bridge):
     assert error.value.status_code == 404
 
 
+async def test_slow_supabase_write_does_not_eat_the_job_deadline(bridge, monkeypatch):
+    # CI on main, 6 Nov 2026: writing wanted_until after the deadline was set took over 10 ms.
+    bridge.timeout = 0.05
+    bridge.poll()
+    write = bridge._want
+
+    def slow_write(seconds):
+        time.sleep(0.1)
+        write(seconds)
+
+    monkeypatch.setattr(bridge, "_want", slow_write)
+    task = asyncio.create_task(bridge.submit("/translate", {"text": "Bonjour"}))
+    await asyncio.sleep(0)
+    assert bridge.poll() is not None
+    with pytest.raises(MediaError, match="temps"):
+        await task
+
+
 async def test_offline_submit_fails_without_queue(bridge):
     with pytest.raises(MediaError, match="hors ligne"):
         await bridge.submit("/translate", {"text": "Hello"})

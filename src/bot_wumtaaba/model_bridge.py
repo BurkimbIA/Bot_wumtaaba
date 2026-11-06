@@ -121,12 +121,13 @@ class ModelBridge:
         self._prune()
         if len(self._jobs) >= 8:
             raise MediaError("La file du Mac est pleine. Réessaie dans quelques instants.")
+        # Wake a connector waiting in Supabase before the job's clock starts: a slow write must not eat it.
+        self._want(self.timeout)
         future = asyncio.get_running_loop().create_future()
         identifier = uuid4().hex
         self._jobs[identifier] = _Job(identifier, route, payload, future,
                                       time.monotonic() + self.timeout, time.time() + self.timeout)
         try:
-            self._want(self.timeout)
             return await asyncio.wait_for(future, timeout=self.timeout)
         except TimeoutError:
             raise MediaError("Le Mac n’a pas répondu à temps. Réessaie.") from None

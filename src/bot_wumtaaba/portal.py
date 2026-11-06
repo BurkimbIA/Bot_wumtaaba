@@ -53,7 +53,7 @@ class PortalConversation:
         command = body.casefold()
         interactive = message.get("interactive", {})
         action = interactive.get("button_reply", interactive.get("list_reply", {})).get("id", "")
-        global_command = command in {"stop", "rappels oui"} or re.fullmatch(
+        global_command = command in {"stop", "rappels oui", "application", "appli", "deconnecter application", "déconnecter application"} or re.fullmatch(
             r"(accepter|refuser)\s+(?:wt-)?[a-f0-9]{8}", command)
         if global_command:
             legacy_state, replies, agreement = await self.legacy.handle(

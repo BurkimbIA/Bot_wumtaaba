@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     graph_version: str = "v25.0"
     transcription_model: str = "gemini-3.8-flash"
     extraction_model: str = "gemini-3.8-flash"
+    french_tts_model: str = "gemini-3.1-flash-tts-preview"
     database_path: Path = Path("data/bot.sqlite3")
     public_access: bool = False
     allowed_senders: str = ""

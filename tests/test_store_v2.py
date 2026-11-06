@@ -36,7 +36,7 @@ def test_migration_legacy_backup_idempotent(tmp_path):
     backup.close()
     store.close()
     store = Store(path)
-    assert store.db.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 1
+    assert store.db.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0] == 2
     assert store.db.execute("SELECT COUNT(*) FROM calendar_events").fetchone()[0] == 1
     store.close()
 

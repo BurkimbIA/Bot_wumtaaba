@@ -81,7 +81,7 @@ def test_menu_has_three_working_choices():
     assert [b["reply"]["id"] for b in menu()["interactive"]["action"]["buttons"]] == [
         "new",
         "list:0",
-        "help",
+        "payment",
     ]
 
 

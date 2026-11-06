@@ -96,7 +96,7 @@ def normalize_agreement(db, identifier, sender, data, created_at, now):
             )
 
 
-def migrate(db, path):
+def migrate_v2(db, path):
     db.execute("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,applied_at REAL NOT NULL)")
     db.commit()
     if db.execute("SELECT 1 FROM schema_migrations WHERE version=2").fetchone():
@@ -129,3 +129,47 @@ def migrate(db, path):
             normalize_agreement(db, row["id"], row["sender"], json.loads(row["data"]), row["created_at"], now)
         db.execute("INSERT INTO schema_migrations VALUES(2,?)", (now,))
         db.execute("INSERT INTO audit_events(kind,details,created_at) VALUES('migration',?,?)", (json.dumps({"version": 2}), now))
+
+
+PAYMENT_DDL = [
+    "CREATE TABLE payments(id TEXT PRIMARY KEY,agreement_id TEXT NOT NULL REFERENCES agreements(id),amount INTEGER NOT NULL CHECK(amount>0),kind TEXT NOT NULL,actor TEXT NOT NULL,source_message_id TEXT UNIQUE,created_at REAL NOT NULL)",
+    "CREATE INDEX payments_agreement ON payments(agreement_id,created_at,id)",
+    "CREATE TABLE mobile_codes(hash TEXT PRIMARY KEY,sender TEXT NOT NULL UNIQUE,expires_at REAL NOT NULL)",
+    "CREATE TABLE mobile_tokens(hash TEXT PRIMARY KEY,sender TEXT NOT NULL,expires_at REAL NOT NULL)",
+    "CREATE INDEX mobile_tokens_owner ON mobile_tokens(sender)",
+]
+
+
+def migrate(db, path):
+    migrate_v2(db, path)
+    if db.execute("SELECT 1 FROM schema_migrations WHERE version=3").fetchone():
+        return
+    if str(path) != ":memory:":
+        backup_path = Path(str(path) + ".pre-v3.sqlite3")
+        if not backup_path.exists():
+            backup = sqlite3.connect(str(backup_path))
+            try:
+                db.backup(backup)
+            finally:
+                backup.close()
+            backup_path.chmod(0o600)
+    now = time.time()
+    with db:
+        db.execute("BEGIN IMMEDIATE")
+        for statement in PAYMENT_DDL:
+            db.execute(statement)
+        for row in db.execute("SELECT a.*,e.status FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id").fetchall():
+            if row["paid"] and row["paid"] > 0:
+                db.execute("INSERT INTO payments VALUES(?,?,?,?,?,?,?)", (
+                    "advance:" + row["id"], row["id"], row["paid"], "initial", row["sender"], None, row["created_at"]))
+            if row["status"] == "settled" and row["total"] > (row["paid"] or 0):
+                # A historical 'settled' declaration is preserved as such, not a bank receipt.
+                event = db.execute("SELECT created_at FROM audit_events WHERE kind='agreement_settled' AND entity_id=? ORDER BY id LIMIT 1", (row["id"],)).fetchone()
+                db.execute("INSERT INTO payments VALUES(?,?,?,?,?,?,?)", (
+                    "legacy-settlement:" + row["id"], row["id"], row["total"] - (row["paid"] or 0),
+                    "legacy_settlement", row["sender"], None, event[0] if event else now))
+                data = json.loads(row["data"])
+                data["paid"] = row["total"]
+                db.execute("UPDATE agreements SET paid=total,data=? WHERE id=?", (json.dumps(data),row["id"]))
+        db.execute("INSERT INTO schema_migrations VALUES(3,?)", (now,))
+        db.execute("INSERT INTO audit_events(kind,details,created_at) VALUES('migration',?,?)", (json.dumps({"version": 3}), now))

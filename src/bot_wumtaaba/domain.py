@@ -96,4 +96,4 @@ def buttons(body: str, options: list[tuple[str, str]]) -> dict:
 
 
 def menu(body: str = "*Wuumtaaba* 🌿\nTon carnet d’accords. Que souhaites-tu faire ?") -> dict:
-    return buttons(body, [("new", "Nouvel accord"), ("list:0", "Mes accords"), ("help", "Aide")])
+    return buttons(body, [("new", "Nouvel accord"), ("list:0", "Mes accords"), ("payment", "Ajouter paiement")])

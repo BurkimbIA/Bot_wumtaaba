@@ -44,6 +44,9 @@ class Database:
             self.connection = psycopg.connect(
                 self.url, autocommit=True, row_factory=_rows, prepare_threshold=None, connect_timeout=10
             )
+            # Supabase may default to 0, which rounds float timestamps on text reads.
+            # Preserve round-trip precision for durable state and snapshot verification.
+            self.connection.execute("SET extra_float_digits=3")
             name = sql.Identifier(self.schema)
             self.connection.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(name))
             self.connection.execute(sql.SQL("SET search_path TO {}").format(name))

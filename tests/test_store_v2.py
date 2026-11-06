@@ -155,3 +155,22 @@ def test_generated_audio_metadata_is_private_and_not_sent_to_meta(make_store):
     assert media["storage_path"] == "private.audio"
     assert "Ne y yibeogo" in media["metadata"]
     store.close()
+
+
+def test_float_timestamps_roundtrip_even_with_low_server_precision(monkeypatch, make_store):
+    connect = psycopg.connect
+
+    def low_precision_connect(*args, **kwargs):
+        connection = connect(*args, **kwargs)
+        connection.execute("SET extra_float_digits=0")
+        return connection
+
+    monkeypatch.setattr(psycopg, "connect", low_precision_connect)
+    store = make_store()
+    timestamp = float.fromhex("0x1.abcdef1234567p+30")
+    for _ in range(2):
+        assert store.db.execute("SHOW extra_float_digits").fetchone()[0] == "3"
+        restored = store.db.execute("SELECT %s::double precision", (timestamp,)).fetchone()[0]
+        assert restored.hex() == timestamp.hex()
+        # The setting must be restored after an idle connection is reopened too.
+        store.db.close()

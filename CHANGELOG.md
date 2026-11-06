@@ -18,7 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Mac connector can wait in Supabase (table `mac_link`) instead of polling Fly: it writes its presence there and polls Fly only while a job waits, so the machine stops when idle. A connector that still polls Fly keeps working and keeps the machine on.
 - `scripts/copy_volume_to_supabase.py` restores a complete SQLite 0.7 snapshot, including payments and mobile sessions. An explicit `--replace-snapshot` restores updates and deletions atomically; schema drift, missing/corrupt audio and differing readback fail closed.
+
+### Security
+
+- Row level security is on for every table of the bot's schema. The bot owns the tables and bypasses it; the policy `mac_connector` keeps the Mac connector's role on its `mac_link` row. `anon`, `authenticated` and `service_role` already had no access to the schema: this guards the day it is exposed to the Data API.
+- `search_fold` runs with an empty `search_path`, as Supabase's advisor asks: it only calls Postgres built-ins.
 
 ### Intégration de la version 0.7
 

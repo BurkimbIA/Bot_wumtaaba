@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS app_model_config (
     updated_at DOUBLE PRECISION NOT NULL);
 INSERT INTO app_model_config(id, provider, updated_at)
     VALUES(1, 'cloud', extract(epoch FROM now())) ON CONFLICT DO NOTHING;
+-- The Mac connector can wait here instead of polling Fly, which lets the machine stop: it writes
+-- last_seen every few seconds and polls Fly only while wanted_until is ahead. Database clock on both sides.
+CREATE TABLE IF NOT EXISTS mac_link (
+    id INTEGER PRIMARY KEY CHECK(id = 1), last_seen DOUBLE PRECISION NOT NULL DEFAULT 0,
+    wanted_until DOUBLE PRECISION NOT NULL DEFAULT 0);
+INSERT INTO mac_link(id) VALUES(1) ON CONFLICT DO NOTHING;
 
 -- Version 0.7 ledger and owner-scoped mobile sessions.
 CREATE TABLE IF NOT EXISTS payments (
@@ -75,8 +81,30 @@ CREATE TABLE IF NOT EXISTS mobile_tokens (
     hash TEXT PRIMARY KEY, sender TEXT NOT NULL, expires_at DOUBLE PRECISION NOT NULL);
 CREATE INDEX IF NOT EXISTS mobile_tokens_owner ON mobile_tokens(sender);
 
--- Match the accent-insensitive French search used by the SQLite store.
+-- Match the accent-insensitive French search used by the SQLite store. Built-ins only, so an empty
+-- search_path (pg_catalog is always searched) keeps a caller's search_path from changing what it calls.
 CREATE OR REPLACE FUNCTION search_fold(value TEXT) RETURNS TEXT
-LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE SET search_path = '' AS $$
     SELECT regexp_replace(normalize(lower(COALESCE(value, '')), NFKD), U&'[\0300-\036f]', '', 'g')
 $$;
+
+-- Row level security on every table here. The bot owns them and bypasses it; any other role sees no row
+-- without a policy, even if this schema is one day exposed to Supabase's Data API. Keep this block last.
+DO $$
+DECLARE t regclass;
+BEGIN
+    FOR t IN SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace
+             AND relkind = 'r' AND NOT relrowsecurity AND pg_has_role(relowner, 'MEMBER') LOOP
+        EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', t);
+    END LOOP;
+END $$;
+-- The Mac connector's role (docs/BURKIMBIA.md) keeps its row; its grants still limit it to reading the
+-- row and writing last_seen. Named by current_user so the policy exists before the role does.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = current_schema()
+                   AND tablename = 'mac_link' AND policyname = 'mac_connector') THEN
+        CREATE POLICY mac_connector ON mac_link
+            USING (current_user = 'wuumtaaba_mac') WITH CHECK (current_user = 'wuumtaaba_mac');
+    END IF;
+END $$;

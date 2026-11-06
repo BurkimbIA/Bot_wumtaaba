@@ -82,6 +82,33 @@ Le connecteur du Mac interroge le bot Fly par HTTPS, authentifié avec `MAC_BRID
 
 Sur le Mac, lancer `mac/start.sh`, puis `mac/start-bridge.sh` dans le dépôt `inference_endpoints`. Le second lit `mac/.bridge-config.json` privé (permissions 600, ignoré par Git), contenant `MAC_BRIDGE_API_KEY`. Les deux processus doivent rester actifs, avec le Mac éveillé et connecté. Après 20 secondes sans contact, le back-office indique le Mac hors ligne. Il n’existe aucun basculement automatique vers le cloud payant.
 
+Un connecteur qui interroge Fly toutes les 2 s, avec un signe de vie toutes les 5 s, empêche la machine Fly de s’arrêter : chaque appel remet son compteur d’inactivité à zéro, et la réveille si elle dort. Le connecteur peut à la place attendre dans la table `mac_link` de Supabase, toujours disponible :
+
+- il écrit `last_seen` toutes les 5 s, ce qui suffit au bot pour le voir en ligne ;
+- il lit `wanted_until` toutes les 2 s et n’interroge Fly que si cette heure est dans le futur, c’est-à-dire quand une tâche l’attend.
+
+Le bot écrit `wanted_until` au dépôt d’une tâche (maintenant plus le délai, 330 s) et le remet à maintenant quand plus aucune tâche n’attend. Les deux côtés prennent l’heure de Postgres, pas celle du Mac. Un connecteur qui interroge encore Fly reste accepté et garde la machine allumée.
+
+Le connecteur se connecte avec un rôle Postgres à lui, qui ne lit que `mac_link` et n’écrit que `last_seen`, avec au plus trois connexions et cinq secondes par requête. Il existe en production depuis le 6 novembre 2026 ; pour le recréer, dans l’éditeur SQL du projet, avec un mot de passe aléatoire gardé hors de Git :
+
+```sql
+CREATE ROLE wuumtaaba_mac LOGIN CONNECTION LIMIT 3 PASSWORD '…';
+ALTER ROLE wuumtaaba_mac SET statement_timeout = '5s';
+GRANT USAGE ON SCHEMA wuumtaaba TO wuumtaaba_mac;
+GRANT SELECT, UPDATE (last_seen) ON wuumtaaba.mac_link TO wuumtaaba_mac;
+```
+
+La sécurité par ligne (RLS) est active sur toutes les tables du schéma : la règle `mac_connector`, créée par le bot au démarrage, laisse ce rôle accéder à la ligne de `mac_link`. Sans elle, ses requêtes ne verraient aucune ligne et le bot le croirait hors ligne.
+
+Il passe par le pooler en mode session, `postgresql://wuumtaaba_mac.iagyxtstnbgstdyppgnp:…@aws-1-eu-west-3.pooler.supabase.com:5432/postgres?sslmode=require`, avec deux requêtes :
+
+```sql
+UPDATE wuumtaaba.mac_link SET last_seen = extract(epoch FROM now()) WHERE id = 1;
+SELECT wanted_until > extract(epoch FROM now()) FROM wuumtaaba.mac_link WHERE id = 1;
+```
+
+Côté Mac, c’est le mode attente du connecteur (BurkimbIA/inference_endpoints#56), activé par `MAC_DATABASE_URL` dans son fichier de configuration privé. Déployer ce bot d’abord : un connecteur en mode attente paraît hors ligne pour un bot qui ne lit pas `mac_link`.
+
 Le conteneur Docker `mac-gateway-1` est seulement un proxy local du port 8766 vers l’API native 8765. Les modèles tournent dans Python sur macOS pour utiliser le GPU Apple Metal ; ils ne tournent pas dans ce conteneur. Le connecteur Fly appelle directement 8765 : Docker n’est pas nécessaire pour cette liaison.
 
 ### Recette du sélecteur — 16 octobre 2026

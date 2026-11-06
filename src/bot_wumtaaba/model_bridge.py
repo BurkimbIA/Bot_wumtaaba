@@ -5,6 +5,7 @@ import hmac
 import json
 import secrets
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from uuid import uuid4
 
@@ -43,6 +44,7 @@ class ModelBridge:
         self._last_seen = None
         self._last_seen_monotonic = None
         self._jobs: dict[str, _Job] = {}
+        self._want(0)  # jobs live in memory: none survives a restart
 
     @property
     def configured(self):
@@ -55,12 +57,31 @@ class ModelBridge:
 
     @property
     def mac_online(self):
-        return bool(self.configured and self._last_seen_monotonic is not None
-                    and time.monotonic() - self._last_seen_monotonic < 20)
+        """Seen within 20 s, either polling Fly or waiting in Supabase (mac_link)."""
+        if not self.configured:
+            return False
+        if self._last_seen_monotonic is not None and time.monotonic() - self._last_seen_monotonic < 20:
+            return True
+        return self._link()[0] < 20
+
+    def _link(self):
+        """(seconds since the connector last wrote in Supabase, that time), on the database clock."""
+        with self.store.lock:
+            row = self.store.db.execute(
+                "SELECT extract(epoch FROM now())::float8 - last_seen, last_seen FROM mac_link WHERE id=1"
+            ).fetchone()
+        return row[0], row[1]
+
+    def _want(self, seconds):
+        """A connector waiting in Supabase polls Fly only until wanted_until."""
+        with self.store.lock:
+            self.store.db.execute(
+                "UPDATE mac_link SET wanted_until=extract(epoch FROM now())::float8 + %s WHERE id=1", (seconds,))
 
     def status(self):
+        last_seen = max(self._last_seen or 0, self._link()[1]) or None
         return {"provider": self.provider, "mac_online": self.mac_online,
-                "last_seen": self._last_seen, "configured": self.configured}
+                "last_seen": last_seen, "configured": self.configured}
 
     def select(self, provider):
         if provider not in {"cloud", "mac"}:
@@ -105,6 +126,7 @@ class ModelBridge:
         self._jobs[identifier] = _Job(identifier, route, payload, future,
                                       time.monotonic() + self.timeout, time.time() + self.timeout)
         try:
+            self._want(self.timeout)
             return await asyncio.wait_for(future, timeout=self.timeout)
         except TimeoutError:
             raise MediaError("Le Mac n’a pas répondu à temps. Réessaie.") from None
@@ -112,6 +134,10 @@ class ModelBridge:
             self._jobs.pop(identifier, None)
             if not future.done():
                 future.cancel()
+            if not self._jobs:
+                # A failed reset only lets the connector poll Fly until wanted_until passes.
+                with suppress(Exception):
+                    self._want(0)
 
     def poll(self, *, heartbeat_only=False):
         self._last_seen = time.time()

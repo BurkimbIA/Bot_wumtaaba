@@ -12,7 +12,7 @@ Conserver **une seule machine et un seul worker** : le connecteur Mac garde ses 
 
 `min_machines_running = 0` : la machine ne tourne que lorsqu’il y a du travail, comme bia-backend. La différence tient à `auto_stop_machines = 'off'`. Le proxy de Fly.io arrête une machine quand il ne voit plus de requête ; or le bot répond au webhook Meta tout de suite et prépare la réponse ensuite, parfois pendant plusieurs minutes (BurkimbIA attend jusqu’à 330 s). Le proxy pourrait donc couper une réponse en cours.
 
-C’est le bot qui s’arrête : quand l’inbox et l’outbox sont vides et qu’aucune requête n’est arrivée depuis `IDLE_SHUTDOWN_SECONDS` (300 s sur Fly.io, `/healthz` exclu), il journalise `idle_shutdown` et termine avec le code 0. La politique de redémarrage `on-failure` laisse alors la machine arrêtée ; la requête suivante (webhook Meta, `/admin`, connecteur Mac) la relance en quelques secondes. Tant que le connecteur Mac interroge le bot, la machine reste allumée.
+C’est le bot qui s’arrête : quand l’inbox et l’outbox sont vides et qu’aucune requête n’est arrivée depuis `IDLE_SHUTDOWN_SECONDS` (300 s sur Fly.io, `/healthz` exclu), il journalise `idle_shutdown` et termine avec le code 0. La politique de redémarrage `on-failure` laisse alors la machine arrêtée ; la requête suivante (webhook Meta, `/admin`, connecteur Mac) la relance en quelques secondes. Un connecteur Mac qui interroge Fly en continu la garde allumée ; s’il attend dans Supabase ([le connecteur](BURKIMBIA.md#choisir-les-modèles-mac-ou-cloud)), elle s’arrête quand aucune tâche ne l’attend.
 
 ### Réveil quotidien pour les rappels
 

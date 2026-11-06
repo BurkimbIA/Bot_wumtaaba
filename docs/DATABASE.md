@@ -19,6 +19,7 @@ Le bot crée le schéma et ses tables au démarrage (`src/bot_wumtaaba/schema.sq
 | mobile_codes, mobile_tokens | Codes temporaires et sessions mobiles liés au propriétaire |
 | reminders | Destinataire, rôle, date J−1/J0, état et sortie associée |
 | audit_events | Événements de traitement et décisions |
+| mac_link | Une ligne : dernier signe de vie du connecteur Mac et heure jusqu’à laquelle le bot l’attend |
 
 Les messages non autorisés ou hors limites sont archivés comme ignorés. Les contenus des types pris en charge sont enregistrés ; seuls les fichiers audio consentis sont téléchargés. Les URL temporaires Meta ne sont pas archivées. Les fichiers des anciens vocaux traités avant cette version ne sont pas récupérés rétroactivement.
 

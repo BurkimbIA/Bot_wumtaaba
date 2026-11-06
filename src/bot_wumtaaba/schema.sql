@@ -81,9 +81,10 @@ CREATE TABLE IF NOT EXISTS mobile_tokens (
     hash TEXT PRIMARY KEY, sender TEXT NOT NULL, expires_at DOUBLE PRECISION NOT NULL);
 CREATE INDEX IF NOT EXISTS mobile_tokens_owner ON mobile_tokens(sender);
 
--- Match the accent-insensitive French search used by the SQLite store.
+-- Match the accent-insensitive French search used by the SQLite store. Built-ins only, so an empty
+-- search_path (pg_catalog is always searched) keeps a caller's search_path from changing what it calls.
 CREATE OR REPLACE FUNCTION search_fold(value TEXT) RETURNS TEXT
-LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE SET search_path = '' AS $$
     SELECT regexp_replace(normalize(lower(COALESCE(value, '')), NFKD), U&'[\0300-\036f]', '', 'g')
 $$;
 

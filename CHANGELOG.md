@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Row level security is on for every table of the bot's schema. The bot owns the tables and bypasses it; the policy `mac_connector` keeps the Mac connector's role on its `mac_link` row. `anon`, `authenticated` and `service_role` already had no access to the schema: this guards the day it is exposed to the Data API.
+- `search_fold` runs with an empty `search_path`, as Supabase's advisor asks: it only calls Postgres built-ins.
 
 ### Intégration de la version 0.7
 

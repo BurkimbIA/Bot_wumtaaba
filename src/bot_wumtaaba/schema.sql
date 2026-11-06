@@ -62,6 +62,12 @@ CREATE TABLE IF NOT EXISTS app_model_config (
     updated_at DOUBLE PRECISION NOT NULL);
 INSERT INTO app_model_config(id, provider, updated_at)
     VALUES(1, 'cloud', extract(epoch FROM now())) ON CONFLICT DO NOTHING;
+-- The Mac connector can wait here instead of polling Fly, which lets the machine stop: it writes
+-- last_seen every few seconds and polls Fly only while wanted_until is ahead. Database clock on both sides.
+CREATE TABLE IF NOT EXISTS mac_link (
+    id INTEGER PRIMARY KEY CHECK(id = 1), last_seen DOUBLE PRECISION NOT NULL DEFAULT 0,
+    wanted_until DOUBLE PRECISION NOT NULL DEFAULT 0);
+INSERT INTO mac_link(id) VALUES(1) ON CONFLICT DO NOTHING;
 
 -- Version 0.7 ledger and owner-scoped mobile sessions.
 CREATE TABLE IF NOT EXISTS payments (

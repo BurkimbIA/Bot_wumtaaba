@@ -74,6 +74,36 @@ def test_provider_persists_and_switch_audited(make_store, dump):
         store.close()
 
 
+def wanted(store):
+    return store.db.execute("SELECT wanted_until > extract(epoch FROM now()) FROM mac_link").fetchone()[0]
+
+
+def test_presence_written_in_supabase_counts_as_online(bridge):
+    bridge.store.db.execute("UPDATE mac_link SET last_seen = extract(epoch FROM now())")
+    assert bridge.mac_online and bridge.status()["last_seen"] is not None
+    bridge.store.db.execute("UPDATE mac_link SET last_seen = extract(epoch FROM now()) - 21")
+    assert not bridge.mac_online
+
+
+async def test_connector_waiting_in_supabase_is_wanted_only_while_a_job_waits(bridge):
+    bridge.store.db.execute("UPDATE mac_link SET last_seen = extract(epoch FROM now())")
+    assert not wanted(bridge.store)
+    task = asyncio.create_task(bridge.submit("/translate", {"text": "Bonjour"}))
+    await asyncio.sleep(0)
+    assert wanted(bridge.store)
+    job = bridge.poll()
+    bridge.complete(job["id"], {"lease": job["lease"], "result": {"output": "Laafi"}})
+    assert await task == {"output": "Laafi"}
+    assert not wanted(bridge.store)
+
+
+def test_restart_forgets_a_stale_request(make_store):
+    store = make_store()
+    store.db.execute("UPDATE mac_link SET wanted_until = extract(epoch FROM now()) + 300")
+    ModelBridge(store, SECRET)
+    assert not wanted(store)
+
+
 @pytest.mark.parametrize("secret", ["", "too-short"])
 def test_unconfigured_bridge_cannot_become_online(secret, make_store):
     store = make_store()

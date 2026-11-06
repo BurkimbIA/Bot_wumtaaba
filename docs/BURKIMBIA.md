@@ -89,20 +89,23 @@ Un connecteur qui interroge Fly toutes les 2 s, avec un signe de vie toutes les 
 
 Le bot écrit `wanted_until` au dépôt d’une tâche (maintenant plus le délai, 330 s) et le remet à maintenant quand plus aucune tâche n’attend. Les deux côtés prennent l’heure de Postgres, pas celle du Mac. Un connecteur qui interroge encore Fly reste accepté et garde la machine allumée.
 
-Le connecteur se connecte avec un rôle Postgres à lui, qui ne lit que `mac_link` et n’écrit que `last_seen`. À créer une fois dans l’éditeur SQL du projet, avec un mot de passe aléatoire gardé hors de Git :
+Le connecteur se connecte avec un rôle Postgres à lui, qui ne lit que `mac_link` et n’écrit que `last_seen`, avec au plus trois connexions et cinq secondes par requête. Il existe en production depuis le 6 novembre 2026 ; pour le recréer, dans l’éditeur SQL du projet, avec un mot de passe aléatoire gardé hors de Git :
 
 ```sql
-CREATE ROLE wuumtaaba_mac LOGIN PASSWORD '…';
+CREATE ROLE wuumtaaba_mac LOGIN CONNECTION LIMIT 3 PASSWORD '…';
+ALTER ROLE wuumtaaba_mac SET statement_timeout = '5s';
 GRANT USAGE ON SCHEMA wuumtaaba TO wuumtaaba_mac;
 GRANT SELECT, UPDATE (last_seen) ON wuumtaaba.mac_link TO wuumtaaba_mac;
 ```
 
-Il passe par le pooler en mode session, `postgresql://wuumtaaba_mac.iagyxtstnbgstdyppgnp:…@aws-1-eu-west-3.pooler.supabase.com:5432/postgres`, avec deux requêtes :
+Il passe par le pooler en mode session, `postgresql://wuumtaaba_mac.iagyxtstnbgstdyppgnp:…@aws-1-eu-west-3.pooler.supabase.com:5432/postgres?sslmode=require`, avec deux requêtes :
 
 ```sql
 UPDATE wuumtaaba.mac_link SET last_seen = extract(epoch FROM now()) WHERE id = 1;
 SELECT wanted_until > extract(epoch FROM now()) FROM wuumtaaba.mac_link WHERE id = 1;
 ```
+
+Côté Mac, c’est le mode attente du connecteur (BurkimbIA/inference_endpoints#56), activé par `MAC_DATABASE_URL` dans son fichier de configuration privé. Déployer ce bot d’abord : un connecteur en mode attente paraît hors ligne pour un bot qui ne lit pas `mac_link`.
 
 Le conteneur Docker `mac-gateway-1` est seulement un proxy local du port 8766 vers l’API native 8765. Les modèles tournent dans Python sur macOS pour utiliser le GPU Apple Metal ; ils ne tournent pas dans ce conteneur. Le connecteur Fly appelle directement 8765 : Docker n’est pas nécessaire pour cette liaison.
 

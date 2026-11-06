@@ -78,3 +78,5 @@ Le token utilisateur Meta de longue durée installé a été vérifié et expire
 ## Une seule instance du bot
 
 Déployer avec `fly deploy --ha=false --app bot-wumtaaba`, puis vérifier dans `fly machines list` qu'une seule machine exécute le bot. La suppression du volume ne rend pas le bridge Mac en mémoire ni la récupération des files compatibles avec plusieurs instances. La CI utilise aussi `--ha=false`.
+
+La section `[processes]` impose `app = 'python -m bot_wumtaaba.server'`. Un déploiement rétablit ainsi la commande applicative après une pause de maintenance réalisée avec une commande de machine temporaire.

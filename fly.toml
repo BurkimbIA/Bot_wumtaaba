@@ -6,6 +6,9 @@ kill_timeout = '30s'
 [build]
   dockerfile = 'Dockerfile'
 
+[processes]
+  app = 'python -m bot_wumtaaba.server'
+
 [env]
   PUBLIC_ACCESS = 'true'
   RETENTION_DAYS = '0'

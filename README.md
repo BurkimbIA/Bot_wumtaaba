@@ -16,7 +16,7 @@ Cette section décrit le nouveau code. Les validations de production datées ci-
 
 ## Le parcours
 
-1. Envoyer `menu`, choisir **Wuumtaaba**, puis **Nouvel accord**.
+1. Envoyer `menu`, puis choisir **Nouvel accord** et la langue **Mooré** ou **Français**.
 2. Écrire ou dicter : « J’ai vendu deux sacs de riz à Awa pour 30 000 francs CFA. Elle a payé 10 000 francs. Le reste est prévu le 20 octobre 2026. »
 3. Le bot restitue la transcription du vocal et demande les informations manquantes.
 4. Vérifier le résumé : client, produit, total, avance, reste et date. Corriger si besoin, puis confirmer.
@@ -28,7 +28,7 @@ Le solde est calculé par le code. Un accord enregistré est une **note personne
 
 **Déployée et vérifiée le 10 octobre 2026 : 134 tests passent, Ruff valide le code.** La migration du volume Fly.io conserve l’accord initial, avec sauvegarde préalable et intégrité SQLite vérifiées. La commande `calendrier` a restitué son échéance depuis WhatsApp sur PC. Un nouveau vocal a été consenti, transcrit, renvoyé dans WhatsApp et archivé sur le volume privé avec sa transcription. Les callbacks envoyé/livré/lu sont enregistrés. Les rappels et leurs garde-fous sont validés par tests automatisés ; aucun rappel réel à deux destinataires n’a encore été envoyé.
 
-La base conserve les contacts, conversations, messages entrants/sortants, statuts de livraison, accords, consentements et événements de rappel. Après accord pour chaque vocal, le fichier sonore privé et sa transcription sont reliés au message d’origine. Les clients connus peuvent aussi demander une transcription sans accéder aux accords du commerçant.
+La base conserve les contacts, conversations, messages entrants/sortants, statuts de livraison, accords, consentements et événements de rappel. Les vocaux reçus sont traités directement ; le fichier sonore privé et sa transcription sont reliés au message d’origine. Les clients connus peuvent aussi demander une transcription sans accéder aux accords du commerçant.
 
 - `calendrier` : échéances du commerçant, à 9 h au Burkina Faso.
 - Fournir le numéro international du client dans le brouillon pour préparer ses rappels.
@@ -44,11 +44,32 @@ Le calendrier est intégré à la base et consultable dans WhatsApp, sans synchr
 
 Accès à **[/admin](https://bot-wumtaaba.fly.dev/admin)** : tableau de bord, recherche d’accords, conversations avec audios/transcriptions et suivi des rappels. Les données clients sont consultables sous session administrateur. L’onglet **Modèles IA** permet de choisir **Mac local** ou **Cloud BurkimbIA (RunPod)** ; voir [le fonctionnement du connecteur](docs/BURKIMBIA.md#choisir-les-modèles-mac-ou-cloud). Le code d’accès est dans le fichier local privé `.admin-access.txt` ; il ne figure pas dans GitHub. Voir [la configuration et les limites](docs/ADMIN.md).
 
-## Portail BurkimbIA — version 0.4
+### Wumtaaba Check
 
-`menu` propose maintenant **BurkimbIA** ou **Wuumtaaba**. BurkimbIA contient traduction français ↔ mooré, transcription de vocaux en mooré, synthèse vocale et une entrée Yaaba dont la disponibilité dépend du raccordement de son API propre. `services` revient aux services BurkimbIA ; `menu` change d’espace et abandonne la saisie en cours.
+Depuis le backoffice, **Wumtaaba Check** ouvre [/admin/check](https://bot-wumtaaba.fly.dev/admin/check)
+avec la même session administrateur : historique audio en lignes, écoute, choix
+Mac/cloud et trois zones de résultats remplacées à chaque analyse.
+Les tests enregistrés et leurs derniers résultats sont conservés dans la table
+Supabase `wuumtaaba.experiments` ; les fichiers sont dans le bucket privé existant
+sous `experiments/`, accessibles uniquement par les routes admin authentifiées.
+Ils sont retrouvables depuis les autres navigateurs après connexion. Un audio
+ajouté reste temporaire jusqu’au clic **Enregistrer** ; les résultats d’un audio
+enregistré sont ensuite actualisés après chaque analyse. Supprimer une ligne
+supprime sa fiche et son fichier privé. Limites : 100 tests, 7 Mo par audio.
+Les essais ne créent pas d’accord réel et ne modifient pas le fournisseur du bot.
+Le mode cloud de Check appelle directement RunPod avec `RUNPOD_API_KEY` et
+`RUNPOD_TRANSCRIPTION_ENDPOINT_ID`, sans passer par le token de l’API BurkimbIA.
+Il propose Whisper pour la transcription seule. NLLB n’a plus d’endpoint RunPod ;
+Mistral et Tengsoaba sont exclus des essais cloud. Les zones traduction et détails
+restent vides en mode cloud. Utiliser le Mac pour une analyse complète.
+Les modèles Mac nécessitent le connecteur actif et les poids déjà installés ;
+l’extraction du texte français utilise Gemini.
 
-Le carnet Wuumtaaba conserve Gemini et ses règles de confirmation, de consentement et de rappels. Les audios BurkimbIA sont archivés en privé ; les vocaux entrants nécessitent un consentement avant traitement. En production, `PUBLIC_ACCESS=true` ouvre le bot à tous les numéros. Voir [les routes API, réglages, limites et protocole de vérification](docs/BURKIMBIA.md). Les tests isolés de cette intégration ne constituent pas une validation de production.
+## Entrée directe dans Wuumtaaba
+
+`menu`, `bonjour`, `salut` et `accueil` ouvrent directement le carnet : **Nouvel accord**, **Mes accords**, **Ajouter paiement**. `annuler` abandonne le brouillon et revient au carnet. Le choix entre BurkimbIA et Wuumtaaba et les services autonomes de traduction, transcription, synthèse et Yaaba ont été retirés.
+
+Les modèles BurkimbIA restent utilisés pour les accords en mooré : transcription, traduction et lecture du résumé. Le fournisseur Mac/Cloud reste sélectionnable dans le back-office. Les brouillons Wuumtaaba existants sont conservés ; les anciennes sessions de services et leurs boutons reviennent au carnet sans traiter leurs vocaux en attente. Voir [les accords en mooré](docs/AGREEMENT_LANGUAGES.md).
 
 ## Supabase et arrêt à vide — migration de la version 0.7
 
@@ -126,7 +147,7 @@ FastAPI reçoit le webhook ; le worker traite les événements ; HTTPX communiqu
 
 - Production : `PUBLIC_ACCESS=true` dans Fly.io. Chaque utilisateur conserve son propre carnet, les consentements et la limite de messages restent appliqués.
 - Pilote fermé (`PUBLIC_ACCESS=false`) : seuls les commerçants de `ALLOWED_SENDERS` et les clients dont le numéro figure dans un accord sont traités. Avec le numéro de test Meta, le testeur doit aussi être vérifié dans l’interface Meta.
-- Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot demande un consentement avant de télécharger et transmettre chaque vocal.
+- Vocaux limités à 14 000 000 octets pour leur transmission intégrée à Gemini. Le bot télécharge et transcrit directement les vocaux reçus ; la transcription et le résumé sont affichés avant confirmation de l’accord.
 - Français et montants entiers en F CFA. La transcription peut se tromper : lire le résumé avant de confirmer.
 - Consultation des données et sélection Mac/Cloud dans le back-office ; pas d’encaissement ni de signature électronique.
 - Les appels Meta/Google Gemini peuvent avoir un coût. Le token utilisateur Meta installé expire le **9 décembre 2026 à 13:10:50 UTC** : prévoir son renouvellement ou une configuration adaptée avec un token d’utilisateur système pour prolonger le service.

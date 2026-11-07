@@ -1,17 +1,22 @@
 """Frontières HTTP : Meta pour les médias/messages, Google Gemini pour la voix/extraction."""
 
+from __future__ import annotations
+
 import base64
 import hashlib
 import hmac
 import json
 from datetime import datetime
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
 
-from .config import Settings
 from .domain import Draft
+
+if TYPE_CHECKING:
+    from .config import Settings
 
 
 class MediaError(ValueError):

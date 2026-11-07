@@ -34,32 +34,33 @@ class Draft(BaseModel):
         return value
 
     def question(self) -> str | None:
-        for key, question in (
-            ("client", "Quel est le nom du client ?"),
-            ("product", "Quel produit as-tu vendu ?"),
-            ("total", "Quel est le prix total en F CFA ?"),
-            ("paid", "Combien a déjà été payé ? Écris 0 s’il n’y a pas d’avance."),
-            ("due_date", "Quelle est la date prévue ? Indique le jour, le mois et l’année."),
-        ):
-            value = getattr(self, key)
-            if value is None or (isinstance(value, str) and not value.strip()):
-                return question
-        if self.paid > self.total:
+        if not any(value is not None and value != "" for value in self.model_dump().values()):
+            return "Aucun détail d’accord reconnu. Renvoie une description de ton accord."
+        if self.paid is not None and self.total is not None and self.paid > self.total:
             return "L’avance dépasse le prix total. Corrige le prix ou le montant déjà payé."
         return None
+
+    @property
+    def balance(self) -> int | None:
+        if self.total is None or self.paid is None:
+            return None
+        return self.total - self.paid
 
     def summary(self) -> str:
         if self.question():
             raise ValueError("Accord incomplet")
         def money(n):
+            if n is None:
+                return "Non renseigné"
             return f"{n:,}".replace(",", " ") + " F CFA"
 
         return (
-            f"*Accord à vérifier*\nClient : {self.client}\nProduit : {self.product}\n"
+            f"*Accord à vérifier*\nClient : {self.client or 'Non renseigné'}\n"
+            f"Produit : {self.product or 'Non renseigné'}\n"
             f"Téléphone client : {self.client_phone or 'non renseigné'}\n"
             f"Prix : {money(self.total)}\nDéjà payé : {money(self.paid)}\n"
-            f"*Reste : {money(self.total - self.paid)}*\n"
-            f"Date prévue : {self.due_date.strftime('%d/%m/%Y')}\n\n"
+            f"*Reste : {money(self.balance)}*\n"
+            f"Date prévue : {self.due_date.strftime('%d/%m/%Y') if self.due_date else 'Non renseignée'}\n\n"
             "Note personnelle — non confirmée par le client."
         )
 

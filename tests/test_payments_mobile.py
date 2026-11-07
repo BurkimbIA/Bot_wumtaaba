@@ -372,12 +372,14 @@ def test_customer_search_keeps_full_totals_across_name_variants_and_accents(api)
     )
 
 
-async def test_new_voice_correction_invalidates_previous_payment_before_consent(store):
-    bot = Conversation(Settings(public_access=True), AsyncMock(), AsyncMock(), store)
+async def test_new_voice_correction_invalidates_previous_payment(store, media):
+    bot = Conversation(Settings(public_access=True), AsyncMock(), AsyncMock(), store, media)
+    bot.whatsapp.audio.return_value = (b"voice", "voice.ogg", "audio/ogg")
+    bot.intelligence.transcribe.return_value = "15000"
     state, _, _ = await bot.handle(OWNER, button("payment:" + IDENTIFIER), {})
     state, _, _ = await bot.handle(OWNER, message("20000"), state)
     old = state["payment"]["id"]
     state, _, _ = await bot.handle(OWNER, {"type": "audio", "audio": {"id": "123"}}, state)
     _, replies, op = await bot.handle(OWNER, button("payconfirm:" + old), state)
     assert op is None and "expiré" in str(replies)
-    bot.whatsapp.audio.assert_not_called()
+    bot.whatsapp.audio.assert_awaited_once_with("123")

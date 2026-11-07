@@ -23,7 +23,7 @@ Toutes les tables du schéma ont la sécurité par ligne (RLS), activée par le 
 | audit_events | Événements de traitement et décisions |
 | mac_link | Une ligne : dernier signe de vie du connecteur Mac et heure jusqu’à laquelle le bot l’attend |
 
-Les messages non autorisés ou hors limites sont archivés comme ignorés. Les contenus des types pris en charge sont enregistrés ; seuls les fichiers audio consentis sont téléchargés. Les URL temporaires Meta ne sont pas archivées. Les fichiers des anciens vocaux traités avant cette version ne sont pas récupérés rétroactivement.
+Les messages non autorisés ou hors limites sont archivés comme ignorés. Les contenus des types pris en charge sont enregistrés ; les vocaux reçus et autorisés sont téléchargés directement, sans demande de confirmation audio. Les URL temporaires Meta ne sont pas archivées. Les fichiers des anciens vocaux traités avant cette version ne sont pas récupérés rétroactivement.
 
 ## Envoi des rappels
 
@@ -62,3 +62,12 @@ uv run python scripts/copy_volume_to_supabase.py backup/bot.sqlite3 backup/media
 5. Configurer les secrets et le réveil quotidien, puis déployer sur **une seule machine** (`fly deploy --ha=false`). Vérifier `fly machines list` : une seule machine doit exécuter le bot. Le bridge Mac en mémoire et la reprise globale des files ne prennent pas en charge plusieurs instances.
 6. Contrôler `/healthz`, menu WhatsApp, paiement et lecture mobile, audio privé, arrêt à vide et réveil par webhook/rappel. Réactiver le connecteur Mac si souhaité ; son polling empêche l'arrêt à vide.
 7. Conserver le volume et les sauvegardes jusqu'à validation de la bascule. Un retour SQLite après des écritures Postgres exige une réconciliation des nouvelles données ; redémarrer l'ancien volume seul perdrait ces écritures.
+
+### Tests audio privés
+
+`experiments` conserve les tests du backoffice : UUID, nom, chemin Storage privé,
+MIME, taille, dates et derniers résultats JSON (trois étapes maximum). La table
+appartient au schéma du bot, avec RLS activé sans politique publique. Les fichiers
+sont sous `experiments/` dans le bucket privé existant ; aucun lien public ni clé
+Supabase n’est envoyé au navigateur. La suppression admin cible la fiche et son
+objet, sans toucher aux audios des conversations WhatsApp.

@@ -19,7 +19,7 @@ flowchart LR
 
 Le menu propose nouvel accord, consultation et aide. Un vocal suit le même parcours qu’un texte après transcription. Les valeurs sont proposées dans un brouillon ; elles ne deviennent un accord qu’après confirmation du commerçant. Le calcul du reste et la validation des montants sont déterministes.
 
-Les audios sont téléchargés depuis Meta après consentement, vérifiés puis transmis en mémoire à Gemini sous forme de données intégrées encodées en base64. La limite de 14 000 000 octets laisse de la place à cet encodage et au texte de la requête. Les fichiers audio sont conservés dans le bucket privé Supabase `MEDIA_BUCKET`, sous un nom dérivé du message et de son empreinte ; les métadonnées et transcriptions sont reliées dans la base. La transcription est demandée en français et renvoyée sur WhatsApp ; l’extraction utilise une réponse JSON structurée.
+Les audios reçus sont téléchargés directement depuis Meta, vérifiés puis transmis en mémoire à Gemini sous forme de données intégrées encodées en base64. La limite de 14 000 000 octets laisse de la place à cet encodage et au texte de la requête. Les fichiers audio sont conservés dans le bucket privé Supabase `MEDIA_BUCKET`, sous un nom dérivé du message et de son empreinte ; les métadonnées et transcriptions sont reliées dans la base. La transcription est demandée en français et renvoyée sur WhatsApp ; l’extraction utilise une réponse JSON structurée.
 
 ## Frontières de confiance
 

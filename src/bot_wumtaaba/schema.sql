@@ -88,6 +88,14 @@ LANGUAGE SQL IMMUTABLE PARALLEL SAFE SET search_path = '' AS $$
     SELECT regexp_replace(normalize(lower(COALESCE(value, '')), NFKD), U&'[\0300-\036f]', '', 'g')
 $$;
 
+-- Private laboratory audio tests; binary data lives in the existing private Storage bucket.
+CREATE TABLE IF NOT EXISTS experiments (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, storage_path TEXT NOT NULL UNIQUE,
+    mime TEXT NOT NULL, byte_count BIGINT NOT NULL CHECK(byte_count > 0),
+    created_at DOUBLE PRECISION NOT NULL, updated_at DOUBLE PRECISION NOT NULL,
+    results TEXT NOT NULL DEFAULT '[]');
+CREATE INDEX IF NOT EXISTS experiments_created ON experiments(created_at DESC, id);
+
 -- Row level security on every table here. The bot owns them and bypasses it; any other role sees no row
 -- without a policy, even if this schema is one day exposed to Supabase's Data API. Keep this block last.
 DO $$

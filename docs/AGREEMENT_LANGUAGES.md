@@ -2,7 +2,7 @@
 
 ## Parcours
 
-`Wuumtaaba` → `Nouvel accord` → **Français** ou **Mooré**.
+`menu` → `Nouvel accord` → **Français** ou **Mooré**.
 
 - Français : texte ou vocal, transcription française par Gemini, puis extraction du brouillon.
 - Mooré : texte ou vocal, transcription mooré par BurkimbIA, traduction française par BurkimbIA, puis extraction du brouillon français par Gemini.
@@ -10,11 +10,11 @@
 - Le résumé propose **Enregistrer**, **Recommencer** et **Écouter en français/mooré**, selon la langue choisie.
 - La lecture énonce client, produit, prix total, avance, reste à payer et date. Elle ne valide et n’enregistre jamais l’accord.
 
-Le téléchargement d’un vocal requiert toujours le consentement pour ce fichier. Le message précise les services de traitement et la conservation privée. La transcription et la traduction française sont reliées au média d’origine ; la langue est conservée dans l’accord confirmé. Le calcul du solde reste déterministe.
+Les vocaux sont téléchargés et traités directement, sans demande Accepter/Refuser. L’aide décrit les services de traitement et la conservation privée. La confirmation du résumé reste nécessaire pour enregistrer un accord. La transcription et la traduction française sont reliées au média d’origine ; la langue est conservée dans l’accord confirmé. Le calcul du solde reste déterministe.
 
 ## Modèles utilisés
 
-Le client BurkimbIA est partagé avec le portail BurkimbIA et utilise donc le même fournisseur choisi dans l’administration : Cloud ou Mac local. Aucun basculement automatique vers un fournisseur payant. Le Mac doit rester allumé, connecté et relié par son connecteur sortant.
+Le client BurkimbIA utilise le fournisseur choisi dans l’administration : Cloud ou Mac local. Le portail de services autonome a été retiré ; ces modèles restent utilisés dans les accords en mooré. Aucun basculement automatique vers un fournisseur payant. Le Mac doit rester allumé, connecté et relié par son connecteur sortant.
 
 La synthèse mooré utilise BurkimbIA. La voix française utilise le compte Gemini existant, modèle configurable `FRENCH_TTS_MODEL`, par défaut `gemini-3.1-flash-tts-preview`. Elle est appelée uniquement après un clic explicite sur la lecture. Aucun nouvel accès fournisseur n’est demandé.
 
@@ -28,11 +28,11 @@ Les entrées longues sont découpées aux limites de mots pour respecter les 512
 
 ## Résumés expirés et compatibilité
 
-Chaque choix de langue et chaque bouton de lecture est lié à son brouillon. Corriger le texte, renvoyer un vocal, recommencer ou changer d’espace invalide les anciens résumés. Les brouillons français créés avant 0.7 restent utilisables. Un nouveau brouillon attend explicitement le choix de langue avant tout traitement.
+Chaque choix de langue et chaque bouton de lecture est lié à son brouillon. Corriger le texte, renvoyer un vocal, recommencer ou revenir au menu invalide les anciens résumés. Les brouillons français créés avant 0.7 restent utilisables. Un nouveau brouillon attend explicitement le choix de langue avant tout traitement.
 
 ## Vérifications
 
-- 276 tests automatisés réussis, dont choix de langue, consentement, routage mooré/français, conservation de l’original, échecs de traduction, absence de validation par lecture, boutons expirés, décodage PCM Gemini et protection des valeurs avant synthèse.
+- 276 tests automatisés réussis, dont choix de langue, routage mooré/français, conservation de l’original, échecs de traduction, absence de validation par lecture, boutons expirés, décodage PCM Gemini et protection des valeurs avant synthèse.
 - Appels réels sur une phrase synthétique courte : voix française HTTP 200 ; synthèse mooré MP3 ; transcription mooré ; traduction française. Aucune donnée de commerçant utilisée pour ces appels.
 - La chaîne sur un vrai vocal d’accord, la prononciation et la qualité linguistique nécessitent une recette par l’utilisateur. Aucun résultat de compréhension parfaite n’est revendiqué.
 

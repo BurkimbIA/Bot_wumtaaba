@@ -30,7 +30,8 @@ def overview(store):
             SELECT (SELECT COUNT(*) FROM contacts) contacts,
               (SELECT COUNT(*) FROM agreements) agreements,
               (SELECT COUNT(*) FROM calendar_events WHERE status='open') open_agreements,
-              (SELECT COALESCE(SUM(GREATEST(COALESCE(a.total,0)-COALESCE(a.paid,0),0)),0)::bigint
+              (SELECT COALESCE(SUM(CASE WHEN a.total IS NOT NULL AND a.paid IS NOT NULL
+                 THEN GREATEST(a.total-a.paid,0) END),0)::bigint
                  FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id
                  WHERE COALESCE(e.status,'open')='open') balance,
               (SELECT COUNT(*) FROM messages WHERE type='audio') audios,
@@ -69,7 +70,8 @@ def agreement_sellers(store, q="", page=1):
     return _page(store,
                  "SELECT a.sender,COUNT(*) agreement_count,COALESCE(SUM(a.total),0)::bigint total_amount,"
                  "COALESCE(SUM(CASE WHEN COALESCE(e.status,'open')='open' "
-                 "THEN GREATEST(COALESCE(a.total,0)-COALESCE(a.paid,0),0) ELSE 0 END),0)::bigint balance "
+                 "AND a.total IS NOT NULL AND a.paid IS NOT NULL "
+                 "THEN GREATEST(a.total-a.paid,0) ELSE 0 END),0)::bigint balance "
                  "FROM agreements a LEFT JOIN calendar_events e ON e.agreement_id=a.id" + where +
                  " GROUP BY a.sender ORDER BY MAX(a.created_at) DESC,a.sender",
                  "SELECT COUNT(DISTINCT a.sender) FROM agreements a" + where,

@@ -9,6 +9,8 @@ from collections import deque
 from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 CLIENT_KEY = "CASE WHEN COALESCE(a.client_phone,'')<>'' THEN 'phone:'||a.client_phone ELSE 'agreement:'||a.id END"
+BALANCE = "CASE WHEN a.total IS NOT NULL AND a.paid IS NOT NULL THEN GREATEST(a.total-a.paid,0) END"
+INCOMPLETE = "a.client_name IS NULL OR a.product IS NULL OR a.total IS NULL OR a.paid IS NULL OR a.due_date IS NULL"
 
 
 def digest(value):
@@ -121,7 +123,8 @@ def install_mobile(app):
             row = store.db.execute(
                 f"SELECT COUNT(*) AS agreements,COUNT(DISTINCT {CLIENT_KEY}) AS clients,"
                 "COALESCE(SUM(total),0) AS total,COALESCE(SUM(paid),0) AS paid,"
-                "COALESCE(SUM(GREATEST(total-paid,0)),0) AS balance,"
+                f"COALESCE(SUM({BALANCE}),0) AS balance,"
+                f"COUNT(*) FILTER (WHERE {INCOMPLETE}) AS incomplete,"
                 "COALESCE(SUM(CASE WHEN total>paid AND due_date<CURRENT_DATE::text THEN 1 ELSE 0 END),0) AS overdue "
                 "FROM agreements a WHERE sender=%s",
                 (sender,),
@@ -136,9 +139,10 @@ def install_mobile(app):
         store = request.app.state.store
         with store.lock:
             rows = store.db.execute(
-                f"SELECT {CLIENT_KEY} AS id,MAX(a.client_name) AS name,"
+                f"SELECT {CLIENT_KEY} AS id,COALESCE(MAX(a.client_name),'Client non renseigné') AS name,"
                 "MAX(a.client_phone) AS phone,COUNT(*) AS agreements,SUM(a.total) AS total,"
-                "SUM(a.paid) AS paid,SUM(GREATEST(a.total-a.paid,0)) AS balance "
+                f"SUM(a.paid) AS paid,SUM({BALANCE}) AS balance,"
+                f"COUNT(*) FILTER (WHERE {INCOMPLETE}) AS incomplete "
                 "FROM agreements a WHERE sender=%s GROUP BY 1 "
                 "HAVING MAX(CASE WHEN strpos(search_fold(COALESCE(client_name,'')),search_fold(%s))>0 "
                 "OR strpos(COALESCE(client_phone,''),%s)>0 THEN 1 ELSE 0 END)=1 "
@@ -159,8 +163,8 @@ def install_mobile(app):
         store = request.app.state.store
         with store.lock:
             rows = store.db.execute(
-                f"SELECT a.id,a.reference,a.client_name AS client,a.client_phone,"
-                "a.product,a.total,a.paid,GREATEST(a.total-a.paid,0) AS balance,a.due_date,a.created_at,"
+                f"SELECT a.id,a.reference,COALESCE(a.client_name,'Client non renseigné') AS client,a.client_phone,"
+                f"COALESCE(a.product,'Produit non renseigné') AS product,a.total,a.paid,{BALANCE} AS balance,a.due_date,a.created_at,"
                 f"{CLIENT_KEY} AS client_id FROM agreements a WHERE a.sender=%s "
                 "AND (strpos(search_fold(COALESCE(a.client_name,'')||' '||COALESCE(a.product,'')||' '||COALESCE(a.reference,'')),search_fold(%s))>0) "
                 f"AND (%s='' OR {CLIENT_KEY}=%s) "
@@ -180,7 +184,9 @@ def install_mobile(app):
             if not row:
                 raise HTTPException(404, "Accord introuvable")
             history = store.payment_history(sender, identifier, offset=(page - 1) * 25, limit=26)
-        return {**row, "payments": history[:25], "has_more": len(history) > 25, "page": page}
+        return {**row, "client": row.get("client") or "Client non renseigné",
+                "product": row.get("product") or "Produit non renseigné",
+                "payments": history[:25], "has_more": len(history) > 25, "page": page}
 
     @app.middleware("http")
     async def mobile_privacy(request, call_next):

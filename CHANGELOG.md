@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Les accords partiels peuvent être résumés et confirmés avec les informations connues, sans relances successives pour les champs absents.
+
+- WhatsApp opens Wuumtaaba directly; the space selector and standalone BurkimbIA services are removed. Existing agreement drafts and Mooré model integrations are preserved; old portal buttons return to the carnet.
+
 - Postgres connections retain exact floating-point timestamp readback even when the server defaults `extra_float_digits` to zero.
 
 - Data moves from SQLite on the Fly volume to Postgres on Supabase (bia-backend's project, schema `wuumtaaba`); voice notes move to the private Supabase Storage bucket `wuumtaaba-media`. New settings: `DATABASE_URL`, `DATABASE_SCHEMA`, `SUPABASE_URL`, `SUPABASE_API_KEY`, `MEDIA_BUCKET`. `DATABASE_PATH` and `MEDIA_DIRECTORY` are gone.
@@ -17,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project follows the BurkimbIA Python layout: `pyproject.toml` built with hatchling, dependencies locked in `uv.lock`, a `justfile`, prek hooks. `requirements.lock` is gone.
 
 ### Added
+- Accès direct RunPod pour la transcription cloud de Wumtaaba Check, sans quota de la plateforme BurkimbIA ; traduction cloud retirée (NLLB absent, Mistral et Tengsoaba exclus).
+- Wumtaaba Check dans le backoffice authentifié : tests audio privés sur Supabase (`experiments` et Storage), choix des modèles indépendant du bot, écoute et résultats remplacés à chaque analyse.
 
 - The Mac connector can wait in Supabase (table `mac_link`) instead of polling Fly: it writes its presence there and polls Fly only while a job waits, so the machine stops when idle. A connector that still polls Fly keeps working and keeps the machine on.
 - `scripts/copy_volume_to_supabase.py` restores a complete SQLite 0.7 snapshot, including payments and mobile sessions. An explicit `--replace-snapshot` restores updates and deletions atomically; schema drift, missing/corrupt audio and differing readback fail closed.

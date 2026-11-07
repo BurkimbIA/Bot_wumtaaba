@@ -13,10 +13,12 @@ from collections import deque
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from starlette.background import BackgroundTask
 
 from . import admin_data
+from .experiments import install_experiments
+from .check_inference import install_check_inference
 
 
 def install_admin(app, settings):
@@ -50,6 +52,27 @@ def install_admin(app, settings):
                   "img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; "
                   "base-uri 'none'; form-action 'self'")
         return HTMLResponse(html, headers={"Content-Security-Policy": policy})
+
+    @router.get("/check")
+    async def check_page(request: Request):
+        try:
+            authorized(request)
+        except HTTPException:
+            return RedirectResponse("/admin?next=check", status_code=303)
+        return FileResponse(Path(__file__).parent / "static" / "check.html", headers={
+            "Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; "
+            "connect-src 'self'; media-src 'self' blob:; img-src 'self' data:; worker-src 'self'; "
+            "font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+        })
+
+    @router.get("/check/assets/{asset}")
+    async def check_asset(request: Request, asset: str):
+        authorized(request)
+        types = {"check.js": "text/javascript", "check.css": "text/css",
+                 "check-library.js": "text/javascript", "check-recording-worklet.js": "text/javascript"}
+        if asset not in types:
+            raise HTTPException(404, "Fichier introuvable")
+        return FileResponse(Path(__file__).parent / "static" / asset, media_type=types[asset])
 
     @router.post("/login")
     async def login(request: Request):
@@ -188,4 +211,6 @@ def install_admin(app, settings):
             response.headers["X-Frame-Options"] = "DENY"
         return response
 
+    install_experiments(router, authorized, same_origin)
+    install_check_inference(router, settings, authorized, same_origin)
     app.include_router(router)

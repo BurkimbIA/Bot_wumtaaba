@@ -180,7 +180,7 @@ class Store:
                     (agreement["id"], sender, json.dumps(agreement), now),
                 )
                 normalize_agreement(self.db, agreement["id"], sender, agreement, now, now)
-                if agreement.get("paid", 0) > 0:
+                if agreement.get("paid") is not None and agreement["paid"] > 0:
                     self.db.execute("INSERT INTO payments VALUES(%s,%s,%s,%s,%s,%s,%s)", (
                         "advance:" + agreement["id"], agreement["id"], agreement["paid"],
                         "initial", sender, None, now))
@@ -467,9 +467,11 @@ class Store:
             if len(rows) != 1:
                 return None
             row = rows[0]
+            balance = (max(0, row["total"] - row["paid"])
+                       if row["total"] is not None and row["paid"] is not None else None)
             return {**json.loads(row["data"]), "id": row["id"], "reference": row["reference"],
                     "paid": row["paid"], "total": row["total"],
-                    "balance": max(0, row["total"] - row["paid"]), "status": row["status"],
+                    "balance": balance, "status": "incomplete" if balance is None else row["status"],
                     "created_at": row["created_at"]}
 
     def payment_history(self, sender, reference, offset=0, limit=20):
@@ -492,7 +494,7 @@ class Store:
             return
         row = self.get_agreement(sender, operation["agreement_id"])
         amount = operation["amount"]
-        if (row is None or row["status"] not in {"open", "paid", "settled"}
+        if (row is None or row["balance"] is None or row["status"] not in {"open", "paid", "settled"}
                 or type(amount) is not int or amount <= 0 or amount > row["balance"]):
             raise ValueError("Paiement invalide ou supérieur au solde")
         if row["paid"] != operation["expected_paid"]:
@@ -528,7 +530,7 @@ class Store:
         from uuid import uuid4
         with self.lock, self.db:
             row = self.get_agreement(sender, reference if reference.upper().startswith("WT-") else "WT-" + reference.upper())
-            if row is None:
+            if row is None or row["balance"] is None:
                 return False
             if row["balance"]:
                 self._apply_payment(sender, {"id": uuid4().hex, "agreement_id": row["id"],

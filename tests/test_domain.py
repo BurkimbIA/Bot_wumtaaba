@@ -41,8 +41,8 @@ def test_invalid_values_rejected(values):
         Draft(**values)
 
 
-def test_missing_fields_and_overpayment_block_confirmation():
-    assert "nom" in Draft(client="  ").question()
+def test_empty_draft_and_overpayment_block_confirmation():
+    assert "Aucun détail" in Draft(client="  ").question()
     draft = complete()
     draft.paid = 11000
     assert "dépasse" in draft.question()
@@ -52,7 +52,20 @@ def test_missing_fields_and_overpayment_block_confirmation():
 
 def test_no_implicit_zero_advance():
     draft = Draft(client="Awa", product="riz", total=1000, due_date="2026-10-20")
-    assert "déjà été payé" in draft.question()
+    assert draft.question() is None
+    assert draft.paid is None and draft.balance is None
+    assert "Déjà payé : Non renseigné" in draft.summary()
+    assert "Reste : Non renseigné" in draft.summary()
+
+
+def test_partial_agreement_is_ready_without_invented_values():
+    draft = Draft(product="riz")
+    assert draft.question() is None
+    assert draft.client is None and draft.total is None and draft.due_date is None
+    assert "Produit : riz" in draft.summary()
+    assert "Client : Non renseigné" in draft.summary()
+    assert "Prix : Non renseigné" in draft.summary()
+    assert "Date prévue : Non renseignée" in draft.summary()
 
 
 def test_chunks_preserve_transcription_without_loss():

@@ -1,15 +1,20 @@
 """Private server-side client for the BurkimbIA platform's native inference API."""
 
+from __future__ import annotations
+
 import base64
 import binascii
 import json
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 import httpx
 
 from .clients import MediaError
-from .config import Settings
 from .media import encode_whatsapp_audio
+
+if TYPE_CHECKING:
+    from .config import Settings
 
 
 class BurkimbIA:

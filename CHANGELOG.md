@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Les accords partiels peuvent être résumés et confirmés avec les informations connues, sans relances successives pour les champs absents.
+
+- WhatsApp opens Wuumtaaba directly; the space selector and standalone BurkimbIA services are removed. Existing agreement drafts and Mooré model integrations are preserved; old portal buttons return to the carnet.
+
 - Postgres connections retain exact floating-point timestamp readback even when the server defaults `extra_float_digits` to zero.
 
 - Data moves from SQLite on the Fly volume to Postgres on Supabase (bia-backend's project, schema `wuumtaaba`); voice notes move to the private Supabase Storage bucket `wuumtaaba-media`. New settings: `DATABASE_URL`, `DATABASE_SCHEMA`, `SUPABASE_URL`, `SUPABASE_API_KEY`, `MEDIA_BUCKET`. `DATABASE_PATH` and `MEDIA_DIRECTORY` are gone.

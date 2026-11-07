@@ -46,41 +46,36 @@ async def test_confirmation_only_and_stale_buttons(setup):
     assert duplicate is None
 
 
-async def test_audio_requires_specific_consent_and_shows_transcription(setup):
+async def test_audio_is_transcribed_directly_without_saving(setup):
     bot, _, wa, ai = setup
-    state, _, _ = await bot.handle("alice", {"type": "audio", "audio": {"id": "123"}}, {})
-    wa.audio.assert_not_called()
-    ai.transcribe.assert_not_called()
-    _, _, _ = await bot.handle("alice", button("audio:wrong"), state)
-    wa.audio.assert_not_called()
-    token = state["pending_audio"]["token"]
-    state, replies, agreement = await bot.handle("alice", button(f"audio:{token}"), state)
+    state, replies, agreement = await bot.handle("alice", {"type": "audio", "audio": {"id": "123"}}, {})
     wa.audio.assert_awaited_once_with("123")
     assert "Awa achète" in str(replies) and agreement is None
     assert "pending_audio" not in state
+    assert "autorises-tu" not in str(replies)
     ai.extract.assert_not_called()
 
 
-async def test_audio_in_draft_and_refusal(setup):
+async def test_audio_in_draft_returns_transcription_and_unconfirmed_summary(setup):
     bot, _, wa, _ai = setup
     state = {"mode": "draft", "draft": {}}
-    state, _, _ = await bot.handle("alice", {"type": "audio", "audio": {"id": "123"}}, state)
-    token = state["pending_audio"]["token"]
-    state, _, _ = await bot.handle("alice", button(f"refuse:{token}"), state)
-    wa.audio.assert_not_called()
-    state, _, _ = await bot.handle("alice", {"type": "audio", "audio": {"id": "456"}}, state)
-    token = state["pending_audio"]["token"]
-    state, replies, agreement = await bot.handle("alice", button(f"audio:{token}"), state)
+    state, replies, agreement = await bot.handle("alice", {"type": "audio", "audio": {"id": "456"}}, state)
+    wa.audio.assert_awaited_once_with("456")
     assert state["confirmation"] and agreement is None
     assert "Transcription" in str(replies) and "Accord à vérifier" in str(replies)
 
 
-async def test_missing_information_never_saved(setup):
+async def test_available_information_is_summarized_and_requires_confirmation(setup):
     bot, _, _, ai = setup
     ai.extract.return_value = Draft(client="Awa")
     state, replies, agreement = await bot.handle("alice", msg("Awa"), {"mode": "draft"})
-    assert not state.get("confirmation") and agreement is None
-    assert "produit" in str(replies)
+    assert state.get("confirmation") and agreement is None
+    assert "Non renseigné" in str(replies)
+    assert "Quel est" not in str(replies)
+    state, replies, agreement = await bot.handle("alice", button("confirm:" + state["confirmation"]), state)
+    assert agreement["client"] == "Awa" and agreement["total"] is None
+    assert agreement["paid"] is None and agreement["due_date"] is None
+    assert state == {} and "Aucun rappel programmé" in str(replies)
 
 
 async def test_store_atomic_and_owner_scoped(setup):

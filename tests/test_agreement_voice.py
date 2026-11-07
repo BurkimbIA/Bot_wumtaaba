@@ -76,18 +76,15 @@ async def test_language_choice_required_before_any_processing_and_old_buttons_ex
     assert state["language"] == "moore" and "expiré" in str(replies)
 
 
-async def test_moore_audio_consent_transcription_translation_and_extract_order(setup):
+async def test_moore_audio_direct_transcription_translation_and_extraction(setup):
     s = setup
     state = await begin(s)
-    state, replies, _ = await s.bot.handle(
+    state, replies, op = await s.bot.handle(
         "owner", {"id": "original", "type": "audio", "audio": {"id": "123"}}, state
     )
-    assert "BurkimbIA" in str(replies) and "Google Gemini" in str(replies)
-    s.wa.audio.assert_not_called()
-    s.bia.transcribe.assert_not_called()
-    state, replies, op = await s.bot.handle(
-        "owner", click("audio:" + state["pending_audio"]["token"]), state
-    )
+    s.wa.audio.assert_awaited_once_with("123")
+    assert "pending_audio" not in state
+    assert "autorises-tu" not in str(replies) and "Accepter" not in str(replies)
     s.bia.transcribe.assert_awaited_once_with(b"voice", "voice.ogg", "audio/ogg", language="moore")
     s.bia.translate.assert_awaited_once_with(
         "Texte mooré issu du vocal", source="moore", target="french"
@@ -102,26 +99,31 @@ async def test_moore_audio_consent_transcription_translation_and_extract_order(s
     assert op["language"] == "moore" and op["total"] == 30000 and state == {}
 
 
-async def test_refused_moore_voice_never_downloaded(setup):
+@pytest.mark.parametrize("action", ["audio:legacy", "refuse:legacy"])
+async def test_legacy_audio_buttons_expire_without_processing(setup, action):
     s = setup
     state = await begin(s)
-    state, _, _ = await s.bot.handle("owner", {"type": "audio", "audio": {"id": "123"}}, state)
-    _, _, op = await s.bot.handle(
-        "owner", click("refuse:" + state["pending_audio"]["token"]), state
-    )
+    state["pending_audio"] = {
+        "id": "123",
+        "token": "legacy",
+        "message_id": "original",
+        "language": "moore",
+    }
+    _, replies, op = await s.bot.handle("owner", click(action), state)
     s.wa.audio.assert_not_called()
     s.bia.transcribe.assert_not_called()
     s.ai.extract.assert_not_called()
-    assert op is None
+    assert op is None and "expiré" in str(replies)
 
 
 async def test_french_voice_uses_gemini_without_translation(setup):
     s = setup
     state = await begin(s, "french")
-    state, _, _ = await s.bot.handle("owner", {"type": "audio", "audio": {"id": "123"}}, state)
     state, replies, op = await s.bot.handle(
-        "owner", click("audio:" + state["pending_audio"]["token"]), state
+        "owner", {"type": "audio", "audio": {"id": "123"}}, state
     )
+    s.wa.audio.assert_awaited_once_with("123")
+    assert "pending_audio" not in state and "autorises-tu" not in str(replies)
     s.ai.transcribe.assert_awaited_once()
     s.bia.transcribe.assert_not_called()
     s.bia.translate.assert_not_called()
@@ -131,10 +133,9 @@ async def test_french_voice_uses_gemini_without_translation(setup):
 async def test_translation_failure_preserves_original_and_prevents_extraction(setup):
     s = setup
     state = await begin(s)
-    state, _, _ = await s.bot.handle("owner", {"type": "audio", "audio": {"id": "123"}}, state)
     s.bia.translate.side_effect = MediaError("Traduction indisponible")
     state, replies, op = await s.bot.handle(
-        "owner", click("audio:" + state["pending_audio"]["token"]), state
+        "owner", {"type": "audio", "audio": {"id": "123"}}, state
     )
     assert "Texte mooré issu du vocal" in str(replies) and "indisponible" in str(replies)
     assert "confirmation" not in state and op is None
@@ -282,3 +283,31 @@ async def test_moore_readback_protects_numbers_and_date_from_translation(setup):
     result = await moore_spoken_summary(s.bia, s.draft)
     for exact in ["Awa", "30000", "10000", "20000", "20/12/2026"]:
         assert exact in result
+
+
+async def test_partial_moore_voice_gets_summary_without_missing_field_questions(setup):
+    s = setup
+    s.ai.extract.return_value = Draft(product="riz", total=30000)
+    state = await begin(s, "moore")
+    state, replies, op = await s.bot.handle(
+        "owner", {"id": "partial-voice", "type": "audio", "audio": {"id": "123"}}, state
+    )
+    assert state["confirmation"] and op is None
+    assert "Accord à vérifier" in str(replies) and "Non renseigné" in str(replies)
+    assert "Quel est" not in str(replies) and "Quelle est" not in str(replies)
+    assert state["draft"]["paid"] is None and state["draft"]["due_date"] is None
+
+
+async def test_partial_readback_keeps_unknown_amounts_unknown(setup):
+    from bot_wumtaaba.agreement_voice import moore_spoken_summary
+
+    draft = Draft(product="riz", total=30000)
+    french = spoken_summary(draft)
+    assert "Prix total : 30000 francs CFA" in french
+    assert "Avance déjà payée : non renseigné" in french
+    assert "Reste à payer : non renseigné" in french
+    assert "None" not in french
+    setup.bia.translate.return_value = "libellé mooré"
+    spoken = await moore_spoken_summary(setup.bia, draft)
+    assert "30000" in spoken and "None" not in spoken
+    verify_spoken_amounts(spoken, draft)

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The project follows the BurkimbIA Python layout: `pyproject.toml` built with hatchling, dependencies locked in `uv.lock`, a `justfile`, prek hooks. `requirements.lock` is gone.
 
 ### Added
+- Accès direct RunPod pour la transcription cloud de Wumtaaba Check, sans quota de la plateforme BurkimbIA ; traduction cloud retirée (NLLB absent, Mistral et Tengsoaba exclus).
+- Wumtaaba Check dans le backoffice authentifié : tests audio privés sur Supabase (`experiments` et Storage), choix des modèles indépendant du bot, écoute et résultats remplacés à chaque analyse.
 
 - The Mac connector can wait in Supabase (table `mac_link`) instead of polling Fly: it writes its presence there and polls Fly only while a job waits, so the machine stops when idle. A connector that still polls Fly keeps working and keeps the machine on.
 - `scripts/copy_volume_to_supabase.py` restores a complete SQLite 0.7 snapshot, including payments and mobile sessions. An explicit `--replace-snapshot` restores updates and deletions atomically; schema drift, missing/corrupt audio and differing readback fail closed.

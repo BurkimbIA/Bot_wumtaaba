@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     burkimbia_api_key: SecretStr = SecretStr("")
     burkimbia_translation_model: str = "bia-translation-v1-fast"
     burkimbia_timeout_seconds: int = Field(default=330, ge=5, le=360)
+    runpod_api_key: SecretStr = SecretStr("")
+    runpod_api_base_url: str = "https://api.runpod.ai/v2"
+    runpod_transcription_endpoint_id: str = ""
+    runpod_speech_endpoint_id: str = ""
+    runpod_timeout_seconds: int = Field(default=330, ge=5, le=600)
     mac_bridge_api_key: SecretStr = SecretStr("")
     burkimbia_yaaba_enabled: bool = False
     graph_version: str = "v25.0"

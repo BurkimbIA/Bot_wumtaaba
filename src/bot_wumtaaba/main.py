@@ -180,7 +180,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                         idle = time.monotonic() - max(last_busy, app.state.last_request)
                         shutdown = getattr(app.state, "request_shutdown", None)
                         if (shutdown and settings.idle_shutdown_seconds and idle > settings.idle_shutdown_seconds
-                                and not store.has_pending_work()):
+                                and not app.state.active_requests and not store.has_pending_work()):
                             # Exit 0 stops the Fly machine; the next webhook or wake-up starts it.
                             logger.warning("idle_shutdown idle_seconds=%d", idle)
                             shutdown()
@@ -193,6 +193,7 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
                         await asyncio.sleep(2)
 
             app.state.last_request = time.monotonic()
+            app.state.active_requests = 0
             task = asyncio.create_task(worker()) if run_worker else None
             app.state.worker = task
             try:
@@ -216,9 +217,15 @@ def create_app(settings: Settings | None = None, *, run_worker=True) -> FastAPI:
     @app.middleware("http")
     async def track_activity(request, call_next):
         # Fly health checks must not keep an idle machine awake.
-        if request.url.path != "/healthz":
+        if request.url.path == "/healthz":
+            return await call_next(request)
+        app.state.last_request = time.monotonic()
+        app.state.active_requests += 1
+        try:
+            return await call_next(request)
+        finally:
+            app.state.active_requests -= 1
             app.state.last_request = time.monotonic()
-        return await call_next(request)
 
     @app.get("/healthz")
     async def health():

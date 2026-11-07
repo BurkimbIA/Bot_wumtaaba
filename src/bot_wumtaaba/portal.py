@@ -9,6 +9,7 @@ import httpx
 from .clients import MediaError
 from .domain import buttons, chunks, text
 from .media import archive_audio
+from .annotations import handle_annotation
 
 
 def root_menu():
@@ -46,6 +47,9 @@ class PortalConversation:
 
     async def handle(self, sender, message, state):
         state = deepcopy(state)
+        annotation = await handle_annotation(self.store, sender, message, state)
+        if annotation is not None:
+            return annotation
         # Existing deployed drafts and pending consents remain valid after upgrading.
         if state and "portal" not in state:
             state = {"portal": "wuumtaaba", "legacy": state}

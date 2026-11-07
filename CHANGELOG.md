@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Dedicated WhatsApp annotation routing for assigned A/B examples, ratings and optional corrections; task sources, assignments, response snapshots and idempotent events are stored in Postgres with RLS, and source audio is verified in private Supabase Storage before registration.
+- Read-only planning and explicit import of the two annotation previews already sent, plus a review document describing task choices and the production persistence checks.
+
 ### Changed
 
 - Postgres connections retain exact floating-point timestamp readback even when the server defaults `extra_float_digits` to zero.

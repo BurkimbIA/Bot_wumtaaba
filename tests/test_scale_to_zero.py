@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -21,8 +22,8 @@ def test_idle_bot_stops_itself_but_health_checks_do_not_count(database):
     stops = []
     settings = Settings(_env_file=None, whatsapp_token="t", meta_app_secret="t", gemini_api_key="t",
                         webhook_verify_token="x" * 32, whatsapp_phone_number_id="123",
-                        allowed_senders="22670000000", supabase_url="https://project.supabase.co",
-                        supabase_api_key="t", idle_shutdown_seconds=1, **database)
+                        allowed_senders="22670000000", aws_access_key_id="test-key",
+                        aws_secret_access_key="test-secret", idle_shutdown_seconds=1, **database)
     app = main.create_app(settings)
     app.state.request_shutdown = lambda: stops.append(True)
     with TestClient(app) as client:
@@ -38,7 +39,9 @@ def test_real_server_idle_exit_is_successful(database, tmp_path):
            "WHATSAPP_TOKEN": "test", "META_APP_SECRET": "test", "GEMINI_API_KEY": "test",
            "WEBHOOK_VERIFY_TOKEN": "x" * 32, "WHATSAPP_PHONE_NUMBER_ID": "123",
            "ALLOWED_SENDERS": "22670000000", "SUPABASE_URL": "https://project.supabase.co",
-           "SUPABASE_API_KEY": "test", "IDLE_SHUTDOWN_SECONDS": "1"}
+           "AWS_ACCESS_KEY_ID": "test-access", "AWS_SECRET_ACCESS_KEY": "test-secret",
+           "IDLE_SHUTDOWN_SECONDS": "1",
+           "PYTHONPATH": str(Path(main.__file__).resolve().parent.parent)}
     result = subprocess.run(
         [sys.executable, "-m", "bot_wumtaaba.server", "--host", "127.0.0.1", "--port", "0"],
         env=env, cwd=tmp_path, capture_output=True, text=True, timeout=20,
@@ -53,8 +56,8 @@ def test_active_analysis_survives_idle_shutdown_threshold(database):
 
     settings = Settings(_env_file=None, whatsapp_token="t", meta_app_secret="t", gemini_api_key="t",
                         webhook_verify_token="x" * 32, whatsapp_phone_number_id="123",
-                        allowed_senders="22670000000", supabase_url="https://project.supabase.co",
-                        supabase_api_key="t", idle_shutdown_seconds=1, **database)
+                        allowed_senders="22670000000", aws_access_key_id="test-key",
+                        aws_secret_access_key="test-secret", idle_shutdown_seconds=1, **database)
     app = main.create_app(settings)
     stops = []
     app.state.request_shutdown = lambda: stops.append(True)

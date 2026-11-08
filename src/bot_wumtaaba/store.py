@@ -11,8 +11,10 @@ from psycopg import sql
 
 from .migrations import contact, log_message, normalize_agreement
 from .mobile import apply_mobile_operation
+from .annotation_store import apply_annotation_operation
 
 SCHEMA = files(__package__).joinpath("schema.sql").read_text()
+SCHEMA += "\n" + files(__package__).joinpath("annotation_schema.sql").read_text()
 
 
 class Row(dict):
@@ -170,7 +172,9 @@ class Store:
                 "DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at",
                 (sender, json.dumps(state), now),
             )
-            if agreement and agreement.get("_operation") in {"mobile_pair", "mobile_revoke"}:
+            if agreement and agreement.get("_operation") == "annotation":
+                apply_annotation_operation(self.db, sender, message_id, agreement)
+            elif agreement and agreement.get("_operation") in {"mobile_pair", "mobile_revoke"}:
                 apply_mobile_operation(self.db, sender, agreement)
             elif agreement and agreement.get("_operation") == "payment":
                 self._apply_payment(sender, agreement, message_id)

@@ -24,6 +24,8 @@ def settings(database):
         allowed_senders="22670000000",
         supabase_url="https://project.supabase.co",
         supabase_api_key="test",
+        aws_access_key_id="test",
+        aws_secret_access_key="test",
         **database,
     )
 

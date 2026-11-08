@@ -1,32 +1,36 @@
-"""Private audio archive in a Supabase Storage bucket: generated names only, no public URL."""
+"""Private audio archive in Tigris: logical database paths remain stable."""
 
 import hashlib
 import os
+import re
 import tempfile
 from pathlib import Path
 
+from .tigris import TigrisAudioStore
 
-class MediaStore:
-    """Private bucket behind the server key; viewers only reach audio through /admin."""
 
-    def __init__(self, settings, http):
-        self.http = http
-        self.url = f"{settings.supabase_url.rstrip('/')}/storage/v1/object/{settings.media_bucket}/"
-        key = settings.supabase_api_key.get_secret_value()
-        self.headers = {"apikey": key, "Authorization": "Bearer " + key}
+class MediaStore(TigrisAudioStore):
+    """Store bot and experiment audio under the private Wuumtaaba prefix."""
+
+    @staticmethod
+    def object_key(name):
+        if not isinstance(name, str) or not re.fullmatch(
+            r"(?:[0-9a-f]{64}|experiments/[0-9a-f]{32})\.audio", name
+        ):
+            raise ValueError("Invalid bot audio path")
+        return "wuumtaaba/media/" + name
 
     async def put(self, name, data, mime):
-        response = await self.http.post(self.url + name, content=data, headers={
-            **self.headers, "Content-Type": mime or "application/octet-stream", "x-upsert": "true"})
-        response.raise_for_status()
+        await super().put(self.object_key(name), data, mime)
 
     async def get(self, name):
-        response = await self.http.get(self.url + name, headers=self.headers)
-        # Storage answers 400 with a 404 body for a missing object.
-        if response.status_code in {400, 404}:
-            return None
-        response.raise_for_status()
-        return response.content
+        return await super().get(self.object_key(name))
+
+    async def delete(self, name):
+        await super().delete(self.object_key(name))
+
+    async def verify_private(self, name):
+        await super().verify_private(self.object_key(name))
 
 
 async def archive_audio(media, message_id: str, data: bytes, mime: str) -> dict:

@@ -1,4 +1,4 @@
-"""Admin-only audio experiments stored in Postgres and private Supabase Storage."""
+"""Admin-only audio experiments stored in Postgres and private Tigris storage."""
 
 import asyncio
 import base64
@@ -104,13 +104,7 @@ def checked_path(row):
 async def delete_object(media, path):
     if not PATH_PATTERN.fullmatch(path):
         raise ValueError("Invalid experiment object path")
-    response = await media.http.delete(media.url + path, headers=media.headers)
-    missing = response.status_code == 404
-    if response.status_code == 400:
-        with suppress(ValueError, TypeError, AttributeError):
-            missing = str(response.json().get("statusCode")) == "404"
-    if not missing:
-        response.raise_for_status()
+    await media.delete(path)
 
 
 def install_experiments(router, authorized, same_origin):

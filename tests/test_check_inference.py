@@ -249,8 +249,8 @@ def test_real_admin_login_protects_experimental_routes(database, monkeypatch):
         whatsapp_phone_number_id="123",
         allowed_senders="22670000000",
         **database,
-        supabase_url="https://project.supabase.co",
-        supabase_api_key="test",
+        aws_access_key_id="test-key",
+        aws_secret_access_key="test-secret",
         admin_password="test-password-" + "x" * 32,
     )
     mock = AsyncMock(return_value=Draft(product="riz"))

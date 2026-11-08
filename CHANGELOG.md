@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Dedicated WhatsApp annotation routing for assigned A/B examples, ratings and optional corrections; task sources, assignments, response snapshots and idempotent events are stored in Postgres with RLS, and source audio is verified in private Tigris storage before registration.
+- Read-only planning and explicit import of the two annotation previews already sent, plus a review document describing task choices and the production persistence checks.
+
 ### Changed
+
+- All bot audio (agreements, annotation sources and admin experiments) uses private Tigris `burkimbia-store`, with Supabase retaining database records and object references. A read-only/explicit-apply migration verifies existing audio without deleting its source.
 
 - Les accords partiels peuvent être résumés et confirmés avec les informations connues, sans relances successives pour les champs absents.
 

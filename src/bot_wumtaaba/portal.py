@@ -2,12 +2,18 @@
 
 from copy import deepcopy
 
+from .annotations import handle_annotation
+
 
 class PortalConversation:
     def __init__(self, settings, whatsapp, burkimbia, store, legacy, media=None):
+        self.store = store
         self.legacy = legacy
 
     async def handle(self, sender, message, state):
+        annotation = await handle_annotation(self.store, sender, message, state)
+        if annotation is not None:
+            return annotation
         # Keep existing agreement drafts; discard sessions from the retired services.
         if state.get("portal") == "wuumtaaba":
             legacy_state = deepcopy(state.get("legacy", {}))

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -38,7 +39,9 @@ def test_real_server_idle_exit_is_successful(database, tmp_path):
            "WHATSAPP_TOKEN": "test", "META_APP_SECRET": "test", "GEMINI_API_KEY": "test",
            "WEBHOOK_VERIFY_TOKEN": "x" * 32, "WHATSAPP_PHONE_NUMBER_ID": "123",
            "ALLOWED_SENDERS": "22670000000", "SUPABASE_URL": "https://project.supabase.co",
-           "SUPABASE_API_KEY": "test", "IDLE_SHUTDOWN_SECONDS": "1"}
+           "AWS_ACCESS_KEY_ID": "test-access", "AWS_SECRET_ACCESS_KEY": "test-secret",
+           "IDLE_SHUTDOWN_SECONDS": "1",
+           "PYTHONPATH": str(Path(main.__file__).resolve().parent.parent)}
     result = subprocess.run(
         [sys.executable, "-m", "bot_wumtaaba.server", "--host", "127.0.0.1", "--port", "0"],
         env=env, cwd=tmp_path, capture_output=True, text=True, timeout=20,

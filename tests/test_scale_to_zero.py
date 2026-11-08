@@ -46,3 +46,25 @@ def test_real_server_idle_exit_is_successful(database, tmp_path):
     assert result.returncode == 0, result.stderr
     assert "idle_shutdown" in result.stderr
     assert "Application shutdown complete" in result.stderr
+
+
+def test_active_analysis_survives_idle_shutdown_threshold(database):
+    import asyncio
+
+    settings = Settings(_env_file=None, whatsapp_token="t", meta_app_secret="t", gemini_api_key="t",
+                        webhook_verify_token="x" * 32, whatsapp_phone_number_id="123",
+                        allowed_senders="22670000000", supabase_url="https://project.supabase.co",
+                        supabase_api_key="t", idle_shutdown_seconds=1, **database)
+    app = main.create_app(settings)
+    stops = []
+    app.state.request_shutdown = lambda: stops.append(True)
+
+    @app.get('/test-slow-analysis')
+    async def slow_analysis():
+        await asyncio.sleep(2)
+        return {'finished': True}
+
+    with TestClient(app) as client:
+        assert client.get('/test-slow-analysis').json() == {'finished': True}
+        assert stops == []
+        assert app.state.active_requests == 0

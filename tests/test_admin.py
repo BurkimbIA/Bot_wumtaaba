@@ -125,3 +125,26 @@ def test_models_admin_strict_small_json(database):
         assert client.post('/admin/api/models', content='x'*1025,
                            headers={'Content-Type': 'application/json'}).status_code == 413
         assert bridge.provider == 'cloud'
+
+
+def test_check_uses_admin_session_and_private_assets(database):
+    settings = config(database)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        page = client.get('/admin/check', follow_redirects=False)
+        assert page.status_code == 303 and page.headers['location'] == '/admin?next=check'
+        assert client.get('/admin/check/assets/check.js').status_code == 401
+        client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        page = client.get('/admin/check')
+        assert page.status_code == 200
+        assert "media-src 'self' blob:" in page.headers['content-security-policy']
+        assert "frame-ancestors 'none'" in page.headers['content-security-policy']
+        assert 'unsafe-inline' not in page.headers['content-security-policy']
+        assert page.headers['cache-control'] == 'no-store'
+        for asset in ('check.js', 'check.css', 'check-library.js', 'check-recording-worklet.js'):
+            response = client.get('/admin/check/assets/' + asset)
+            assert response.status_code == 200
+            assert response.headers['x-content-type-options'] == 'nosniff'
+        assert client.get('/admin/check/assets/admin.py').status_code == 404
+        shell = client.get('/admin').text
+        assert 'class="check-cta" href="/admin/check"' in shell
+        assert 'class="check-link" href="/admin/check"' in shell

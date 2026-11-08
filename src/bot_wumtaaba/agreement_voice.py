@@ -38,11 +38,15 @@ async def translate_all(api, value, source, target):
 def spoken_summary(draft):
     if draft.question():
         raise MediaError("Complète d’abord les informations de l’accord.")
+    def amount(value):
+        return f"{value} francs CFA" if value is not None else "non renseigné"
+
     return (
-        f"Résumé de l’accord à vérifier. Client : {draft.client}. Produit : {draft.product}. "
-        f"Prix total : {draft.total} francs CFA. Avance déjà payée : {draft.paid} francs CFA. "
-        f"Reste à payer : {draft.total - draft.paid} francs CFA. "
-        f"Date prévue : {draft.due_date.strftime('%d/%m/%Y')}. "
+        f"Résumé de l’accord à vérifier. Client : {draft.client or 'non renseigné'}. "
+        f"Produit : {draft.product or 'non renseigné'}. "
+        f"Prix total : {amount(draft.total)}. Avance déjà payée : {amount(draft.paid)}. "
+        f"Reste à payer : {amount(draft.balance)}. "
+        f"Date prévue : {draft.due_date.strftime('%d/%m/%Y') if draft.due_date else 'non renseignée'}. "
         "Note personnelle, non confirmée par le client. Vérifie avant d’enregistrer."
     )
 
@@ -52,7 +56,8 @@ def verify_spoken_amounts(translated, draft):
     numbers = {
         re.sub(r"\s", "", item) for item in re.findall(r"\d+(?:[ \u00a0\u202f]\d{3})*", translated)
     }
-    if not {str(draft.total), str(draft.paid), str(draft.total - draft.paid)} <= numbers:
+    expected = {str(value) for value in (draft.total, draft.paid, draft.balance) if value is not None}
+    if not expected <= numbers:
         raise MediaError(
             "La lecture en mooré n’a pas conservé tous les montants. "
             "Vérifie le résumé écrit ; aucun accord enregistré."
@@ -74,6 +79,7 @@ async def moore_spoken_summary(api, draft):
         "Reste à payer en francs CFA",
         "Date prévue, jour mois année",
         "Note personnelle non confirmée par le client. Vérifie avant d’enregistrer.",
+        "Non renseigné",
     ]
     # Cache only generic labels on the existing provider client, never user data.
     key = (
@@ -93,16 +99,16 @@ async def moore_spoken_summary(api, draft):
             )
         cache[key] = labels
         api._agreement_label_cache = cache
-    product = await translate_all(api, draft.product, "french", "moore")
+    product = await translate_all(api, draft.product, "french", "moore") if draft.product else labels[8]
     spoken = "\n".join(
         [
             labels[0],
-            f"{labels[1]} : {draft.client}.",
+            f"{labels[1]} : {draft.client or labels[8]}.",
             f"{labels[2]} : {product}.",
-            f"{labels[3]} : {draft.total}.",
-            f"{labels[4]} : {draft.paid}.",
-            f"{labels[5]} : {draft.total - draft.paid}.",
-            f"{labels[6]} : {draft.due_date.strftime('%d/%m/%Y')}.",
+            f"{labels[3]} : {draft.total if draft.total is not None else labels[8]}.",
+            f"{labels[4]} : {draft.paid if draft.paid is not None else labels[8]}.",
+            f"{labels[5]} : {draft.balance if draft.balance is not None else labels[8]}.",
+            f"{labels[6]} : {draft.due_date.strftime('%d/%m/%Y') if draft.due_date else labels[8]}.",
             labels[7],
         ]
     )

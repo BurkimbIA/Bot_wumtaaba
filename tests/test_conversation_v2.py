@@ -27,16 +27,12 @@ def bot(media):
     return Conversation(settings, wa, intelligence, store, media)
 
 
-async def test_voice_archive_bound_to_original_message_and_consent(bot):
+async def test_voice_archive_bound_to_original_message_without_consent_prompt(bot):
     state, replies, _ = await bot.handle("merchant", {
         "id": "wamid-original", "type": "audio", "audio": {"id": "123"}
     }, {})
-    assert "conservé en privé" in str(replies)
-    assert bot.media.objects == {}
-    await bot.handle("merchant", button("audio:obsolete"), state)
-    bot.whatsapp.audio.assert_not_awaited()
-    token = state["pending_audio"]["token"]
-    _, replies, _ = await bot.handle("merchant", button("audio:" + token), state)
+    bot.whatsapp.audio.assert_awaited_once_with("123")
+    assert "pending_audio" not in state and "autorises-tu" not in str(replies)
     [(name, (data, _mime))] = bot.media.objects.items()
     assert data == b"private audio"
     calls = bot.store.record_media.call_args_list
@@ -48,10 +44,9 @@ async def test_voice_archive_bound_to_original_message_and_consent(bot):
 
 async def test_failed_transcription_keeps_file_and_records_failure(bot):
     bot.intelligence.transcribe.side_effect = ValueError("invalid provider JSON")
-    state, _, _ = await bot.handle("merchant", {
+    state, replies, _ = await bot.handle("merchant", {
         "id": "original", "type": "audio", "audio": {"id": "123"}
     }, {})
-    _, replies, _ = await bot.handle("merchant", button("audio:" + state["pending_audio"]["token"]), state)
     assert len(bot.media.objects) == 1
     assert bot.store.record_media.call_args.kwargs["metadata"]["status"] == "failed"
     assert "invalid provider" not in str(replies)
@@ -95,14 +90,11 @@ async def test_settled_command_uses_ownership_store_method(bot):
 
 async def test_known_customer_can_archive_voice_without_merchant_draft(bot):
     bot.store.is_known_customer.return_value = True
-    state, _, _ = await bot.handle("customer", {
+    state, replies, agreement = await bot.handle("customer", {
         "id": "customer-audio", "type": "audio", "audio": {"id": "123"}
     }, {"mode": "draft", "draft": {"client": "should be discarded"}, "confirmation": "old"})
     assert "draft" not in state and "mode" not in state
-    bot.whatsapp.audio.assert_not_awaited()
-    state, replies, agreement = await bot.handle(
-        "customer", button("audio:" + state["pending_audio"]["token"]), state
-    )
+    bot.whatsapp.audio.assert_awaited_once_with("123")
     assert "Bonjour le client" in str(replies)
     assert agreement is None and state == {}
     assert all(reply["type"] == "text" for reply in replies)

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wumtaaba Check · Tests audio</title>
+  <link rel="stylesheet" href="/admin/check/assets/check.css">
+  <script src="/admin/check/assets/check-library.js"></script>
+  <script src="/admin/check/assets/check.js" defer></script>
+</head>
+<body>
+<header class="page-header">
+  <a class="brand" href="/admin">B<span>BurkimbIA <small>BACK OFFICE</small></span></a>
+  <a href="/admin">← Retour au backoffice</a>
+</header>
+<main>
+  <section class="intro">
+    <p class="eyebrow">WUMTAABA CHECK</p>
+    <h1>Vos tests audio, simplement.</h1>
+    <p>Choisissez un vocal, changez les modèles et comparez leurs résultats.</p>
+  </section>
+  <div class="workspace">
+    <aside class="history-panel panel" aria-labelledby="history-title">
+      <div class="panel-heading">
+        <div><p class="eyebrow">VOTRE BIBLIOTHÈQUE</p><h2 id="history-title">Historique des tests</h2></div>
+        <span id="history-count" class="counter" aria-label="Nombre d’audios">0</span>
+      </div>
+      <div class="import-actions">
+        <button id="record" type="button">● Vocal</button>
+        <label class="file-button" for="audio-file">Joindre un audio<input id="audio-file" data-control type="file" accept="audio/*"></label>
+      </div>
+      <p id="record-status" class="muted" role="status">Le micro est éteint. Aucun audio n’est envoyé automatiquement.</p>
+      <div id="history-items" class="history-items" aria-label="Audios de test"></div>
+      <p class="history-note">Les audios enregistrés et leurs résultats sont conservés dans Supabase et accessibles depuis ce backoffice. Les audios non enregistrés disparaissent au rechargement.</p>
+    </aside>
+    <section class="analysis-column" aria-label="Analyse de l’audio sélectionné">
+      <p id="chat-error" class="error" role="alert" hidden></p>
+      <div id="selected-empty" class="empty-selection panel">
+        <span class="empty-icon" aria-hidden="true">♫</span>
+        <h2>Choisissez un audio</h2>
+        <p>Sélectionnez une ligne dans l’historique, joignez un fichier ou enregistrez un vocal.</p>
+      </div>
+      <section id="selected-panel" class="panel" aria-labelledby="selected-title" hidden>
+        <p class="eyebrow">AUDIO SÉLECTIONNÉ</p>
+        <h2 id="selected-title">Écoutez, puis analysez.</h2>
+        <label for="audio-name">Nom du test<input id="audio-name" data-control type="text" maxlength="200" placeholder="Nom de cet audio"></label>
+        <button id="play-audio" type="button" aria-label="Lire l’audio sélectionné">▶ Écouter</button>
+        <audio id="input-audio" controls preload="metadata"></audio>
+        <div class="audio-actions">
+          <button id="save-audio" data-control type="button">Enregistrer l’audio et les résultats</button>
+          <button id="delete-audio" data-control type="button" class="danger">Supprimer cet audio</button>
+        </div>
+        <div class="model-settings">
+          <h3>Modèles de cet essai</h3>
+          <label for="provider">Exécution<select id="provider" data-control><option value="mac">Sur mon Mac</option><option value="cloud">Dans le cloud</option></select></label>
+          <label for="transcription-model">Transcription<select id="transcription-model" data-control></select></label>
+          <label for="mo-fr-model">Traduction mooré → français<select id="mo-fr-model" data-control></select></label>
+          <p id="models-note" class="muted">Chargement des modèles…</p>
+          <p id="availability" class="availability" role="status">Vérification du Mac…</p>
+        </div>
+        <button id="analyze-audio" data-control type="button" class="primary">Lancer l’analyse ↗</button>
+        <p id="analysis-status" class="muted" role="status">Le même audio peut être analysé avec plusieurs modèles.</p>
+      </section>
+      <section class="panel results-panel" aria-labelledby="results-title">
+        <div class="panel-heading"><div><p class="eyebrow">DERNIÈRE ANALYSE</p><h2 id="results-title">Résultats des modèles</h2></div><span id="stage-count" class="counter" aria-label="Nombre de résultats">0</span></div>
+        <p class="muted">Chaque analyse remplace les résultats dans les mêmes zones.</p>
+        <section class="result-zone">
+          <label for="result-transcribe">Transcription mooré</label>
+          <p id="model-transcribe" class="stage-model">En attente d’analyse</p>
+          <textarea id="result-transcribe" rows="5" readonly placeholder="Transcription mooré…"></textarea>
+          <p id="error-transcribe" class="stage-error" role="status" hidden></p>
+        </section>
+        <section class="result-zone">
+          <label for="result-translate">Traduction française</label>
+          <p id="model-translate" class="stage-model">En attente d’analyse</p>
+          <textarea id="result-translate" rows="5" readonly placeholder="Traduction française…"></textarea>
+          <p id="error-translate" class="stage-error" role="status" hidden></p>
+        </section>
+        <section class="result-zone">
+          <label for="result-extract">Détails de l’accord</label>
+          <p id="model-extract" class="stage-model">En attente d’analyse</p>
+          <textarea id="result-extract" rows="8" readonly placeholder="Détails de l’accord…"></textarea>
+          <p id="error-extract" class="stage-error" role="status" hidden></p>
+        </section>
+      </section>
+    </section>
+  </div>
+</main>
+<footer>Tests réservés au laboratoire : aucun accord réel n’est créé et aucun message WhatsApp n’est envoyé. L’extraction transmet le texte français à Gemini, même en mode Mac. Les appels cloud transmettent l’audio ou le texte au service choisi et peuvent être facturés.</footer>
+</body>
+</html>

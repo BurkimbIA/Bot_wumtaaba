@@ -8,7 +8,7 @@ WhatsApp conserve la création des accords, les vocaux, les confirmations et l�
 
 1. Choisir **Ajouter paiement**, ou envoyer `paiement` dans l’espace Wuumtaaba.
 2. Donner la référence `WT-…` ou chercher le nom du client. Une recherche propose les accords ; elle ne choisit pas automatiquement entre homonymes.
-3. Saisir un montant entier en F CFA. Un vocal peut être transcrit dans WhatsApp après consentement ; le montant doit être numérique et sans ambiguïté.
+3. Saisir un montant entier en F CFA. Un vocal est transcrit directement dans WhatsApp ; le montant doit être numérique et sans ambiguïté.
 4. Vérifier le nouveau versement et le nouveau solde. Corriger par message ou confirmer **Enregistrer**. `annuler` ou **Annuler** abandonne la saisie.
 5. `historique WT-référence` donne le détail et les versements, par pages de cinq. Les listes d’accords proposent aussi l’ouverture de la fiche.
 

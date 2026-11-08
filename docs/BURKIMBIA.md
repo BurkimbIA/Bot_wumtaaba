@@ -1,25 +1,12 @@
-# BurkimbIA dans le bot WhatsApp
+# Modèles BurkimbIA dans Wuumtaaba
 
-Le portail conserve deux parcours séparés. `menu`, `bonjour` ou `salut` affiche les boutons **BurkimbIA** et **Wuumtaaba**. Choisir Wuumtaaba ouvre le carnet d’accords existant. Choisir BurkimbIA ouvre une liste de quatre services.
-
-| Service | Entrée | Sortie |
-| --- | --- | --- |
-| Traduction | Texte français ou mooré ; choisir le sens | Traduction texte français ↔ mooré |
-| Transcription | Vocal en mooré, après consentement pour ce fichier | Transcription dans WhatsApp |
-| Synthèse vocale | Texte en mooré | Fichier audio dans WhatsApp |
-| Yaaba | Entrée de menu réservée à l’assistant | Message d’indisponibilité tant que son API de conversation n’est pas connectée et vérifiée |
-
-Pour utiliser les services sans ouvrir les boutons interactifs, envoyer `/traduction`, `/transcription`, `/voix` ou `/yaaba`. La traduction propose aussi `/fr-mo` et `/mo-fr` pour choisir le sens. Ces commandes explicites permettent de changer de service pendant une saisie. Les mots simples `traduction`, `transcription`, `synthèse vocale` et `yaaba` sont également reconnus quand aucun service n’est actif ; dans un service actif, ils restent du contenu à traiter.
-
-Dans BurkimbIA, `services` revient à la liste des services ; `menu` revient au choix des deux espaces. Ces commandes abandonnent la saisie et toute demande de consentement audio en attente. Changer d’espace abandonne aussi un brouillon Wuumtaaba non enregistré : un ancien bouton de confirmation ne peut pas le sauvegarder ensuite. Les accords déjà enregistrés restent conservés.
-
-Les commandes `STOP`, `rappels oui`, `ACCEPTER WT-référence` et `REFUSER WT-référence` gardent leur rôle pour les rappels, même depuis BurkimbIA. Le client d’un accord ne reçoit pas les droits du commerçant en ouvrant Wuumtaaba.
+Le bot ouvre directement le carnet Wuumtaaba. Le choix des espaces et les services autonomes ont été retirés. Les modèles BurkimbIA servent à transcrire les vocaux mooré, traduire les descriptions et lire les résumés des accords. Voir [le parcours français/mooré](AGREEMENT_LANGUAGES.md).
 
 ## Fournisseurs et confidentialité
 
-Le parcours **Wuumtaaba** conserve Google Gemini pour l’extraction des accords et la transcription française. Le parcours **BurkimbIA** utilise ses propres API. Une indisponibilité BurkimbIA produit un message d’erreur ; le bot ne bascule pas silencieusement vers Gemini.
+Le parcours **Wuumtaaba** conserve Google Gemini pour l’extraction des accords et la transcription française. Les étapes mooré utilisent les API BurkimbIA. Une indisponibilité BurkimbIA produit un message d’erreur ; le bot ne bascule pas silencieusement vers Gemini.
 
-Chaque vocal destiné à la transcription BurkimbIA demande un accord explicite avant téléchargement depuis Meta, transmission à BurkimbIA et conservation privée. Les commandes `/accepter-vocal` et `/refuser-vocal` répondent à la demande concernant le dernier vocal reçu, uniquement dans le service Transcription avec une demande en attente. Sans demande valide, elles ne déclenchent aucun traitement. Refuser ne déclenche aucun téléchargement ni appel de transcription. L’audio et la transcription sont associés au message reçu, dans la base et dans le bucket privé des médias.
+Chaque vocal destiné à la transcription BurkimbIA demande un accord explicite avant téléchargement depuis Meta, transmission à BurkimbIA et conservation privée. Les boutons Accepter et Refuser répondent à la demande liée au vocal courant dans le carnet. Un bouton expiré ne déclenche aucun traitement. Refuser ne déclenche aucun téléchargement ni appel de transcription. L’audio et la transcription sont associés au message reçu, dans la base et dans le bucket privé des médias.
 
 Les fichiers vocaux générés sont également archivés dans le bucket privé, avec le texte source dans les métadonnées. Le bot téléverse l’audio auprès de Meta et envoie son identifiant de média ; il n’expose pas de lien public vers l’archive. Les métadonnées internes d’archivage sont retirées avant l’envoi à Meta. L’accès aux médias du back-office reste soumis à l’authentification administrateur.
 
@@ -53,10 +40,10 @@ Cette intégration ne modifie pas le filtre d’accès : les commerçants de `AL
 
 Les tests isolés vérifient navigation, directions de traduction, consentement avant téléchargement, archivage, envoi de média, erreurs fournisseur, expiration des boutons et maintien des autorisations Wuumtaaba. Ils n’établissent pas à eux seuls qu’un endpoint de production ou un échange WhatsApp réel fonctionne.
 
-Pour la recette réelle, vérifier successivement le choix des espaces, une traduction dans chaque sens, un vocal mooré consenti et transcrit, puis une synthèse vocale reçue et lisible. Vérifier aussi `services`, `menu`, un refus audio et un accord Wuumtaaba. Consigner séparément les résultats des appels API et ceux observés dans WhatsApp ; ne déclarer Yaaba opérationnel qu’après test de son API propre.
+Pour la recette réelle, vérifier l’entrée directe dans le carnet, un accord mooré avec vocal consenti, transcription, traduction, résumé et lecture audio, puis une correction et une confirmation. Vérifier aussi le refus audio et l’annulation. Consigner séparément les appels API et les échanges WhatsApp réellement observés.
 
 
-## Résultats des appels API réels — 16 octobre 2026
+## Historique : résultats des appels API réels — 16 octobre 2026
 
 Les vérifications suivantes ont été exécutées depuis l’environnement local contre les API réelles. Une clé dédiée au bot est utilisée ; aucune valeur secrète n’est conservée dans cette documentation.
 

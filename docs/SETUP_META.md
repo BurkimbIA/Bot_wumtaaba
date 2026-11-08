@@ -31,7 +31,7 @@ Ouvrir la conversation avec le numéro de test depuis WhatsApp Desktop ou WhatsA
 | Texte | Choisir Nouvel accord, envoyer l’exemple du README | Résumé avec total 30 000, avance 10 000, reste 20 000 F CFA |
 | Correction | Demander de changer l’avance à 12 000 | Résumé recalculé avec reste 18 000 F CFA avant confirmation |
 | Enregistrement | Confirmer le résumé correct | Confirmation puis accord visible dans Mes accords |
-| Vocal | Démarrer un nouvel accord et dicter une vente fictive en français | Demande de consentement ; après acceptation, transcription renvoyée dans WhatsApp, puis résumé ou question ciblée |
+| Vocal | Démarrer un nouvel accord et dicter une vente fictive en français | Transcription directe renvoyée dans WhatsApp, puis résumé ou question ciblée ; confirmation requise avant enregistrement |
 | Information manquante | Omettre la date | Question sur la date, pas d’accord incomplet enregistré |
 | Annulation | Annuler un brouillon | Aucun nouvel accord sauvegardé |
 | Isolement | Utiliser deux testeurs autorisés | Chacun consulte uniquement ses propres accords |

@@ -8,6 +8,8 @@ from .domain import buttons, text
 
 
 def money(amount):
+    if amount is None:
+        return "Non renseigné"
     return f"{amount:,}".replace(",", " ") + " F CFA"
 
 
@@ -22,12 +24,12 @@ def detail(store, sender, ref, page=0):
         return [text("Aucun accord correspondant dans ton carnet.")]
     payments = store.payment_history(sender, row["id"], offset=page * 5, limit=6)
     lines = [
-        f"*{row['reference']} · {row['client']}*",
-        row["product"],
+        f"*{row['reference']} · {row.get('client') or 'Client non renseigné'}*",
+        row.get("product") or "Produit non renseigné",
         f"Prix : {money(row['total'])}",
         f"Payé : {money(row['paid'])}",
         f"*Reste : {money(row['balance'])}*",
-        f"Échéance : {row['due_date']}",
+        f"Échéance : {row.get('due_date') or 'Non renseignée'}",
         "\n*Historique des versements*",
     ]
     for payment in payments[:5]:
@@ -72,7 +74,8 @@ def prepare(store, sender, state, body):
                 {
                     "id": "payment:" + r["id"],
                     "title": r["reference"],
-                    "description": f"{r['client_name'][:30]} · reste {money(r['total'] - r['paid'])}",
+                    "description": f"{(r['client_name'] or 'Client non renseigné')[:30]} · reste "
+                    + money(r['total'] - r['paid'] if r['total'] is not None and r['paid'] is not None else None),
                 }
                 for r in rows
             ]
@@ -97,6 +100,8 @@ def prepare(store, sender, state, body):
     row = store.get_agreement(sender, state.get("agreement_id", ""))
     if row is None:
         return {}, [text("Accord introuvable. Reprends depuis Mes accords.")], None
+    if row["balance"] is None:
+        return {}, [text("Le prix total ou le montant déjà payé n’est pas renseigné. Aucun paiement ajouté.")], None
     clean = re.sub(r"[ \u00a0\u202f]", "", body.strip())
     clean = re.sub(r"(?i)(?:fcfa|francscfa|francs)?[.!]?$", "", clean)
     if not re.fullmatch(r"[0-9]{1,10}", clean):
@@ -131,7 +136,8 @@ def prepare(store, sender, state, body):
         state,
         [
             buttons(
-                f"*Paiement à vérifier · {row['reference']}*\n{row['client']} · {row['product'][:120]}\n"
+                f"*Paiement à vérifier · {row['reference']}*\n"
+                f"{row.get('client') or 'Client non renseigné'} · {(row.get('product') or 'Produit non renseigné')[:120]}\n"
                 f"Nouveau versement : {money(amount)}\nDéjà payé : {money(row['paid'])}\n"
                 f"Payé après validation : {money(row['paid'] + amount)}\n"
                 f"*Nouveau reste : {money(row['balance'] - amount)}*\n"
@@ -144,13 +150,15 @@ def prepare(store, sender, state, body):
 
 
 def start(row):
+    if row["balance"] is None:
+        return {}, [text("Le prix total ou le montant déjà payé n’est pas renseigné. Aucun paiement ajouté.")], None
     if not row["balance"]:
         return {}, [text("Cet accord est déjà soldé. Aucun paiement ajouté.")], None
     return (
         {"mode": "payment_amount", "agreement_id": row["id"]},
         [
             text(
-                f"*{row['reference']} · {row['client']}*\nReste : {money(row['balance'])}\n"
+                f"*{row['reference']} · {row.get('client') or 'Client non renseigné'}*\nReste : {money(row['balance'])}\n"
                 "Quel montant viens-tu de recevoir ? Envoie le montant entier en F CFA. "
                 "Tu peux aussi dicter uniquement le montant dans un vocal. « annuler » pour quitter."
             )
@@ -177,7 +185,7 @@ def handle(store, sender, state, command, action):
                 None,
             )
         row = store.get_agreement(sender, op["agreement_id"])
-        if row is None or row["paid"] != op["expected_paid"] or op["amount"] > row["balance"]:
+        if row is None or row["balance"] is None or row["paid"] != op["expected_paid"] or op["amount"] > row["balance"]:
             return (
                 {},
                 [

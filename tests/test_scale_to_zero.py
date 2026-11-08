@@ -21,8 +21,8 @@ def test_idle_bot_stops_itself_but_health_checks_do_not_count(database):
     stops = []
     settings = Settings(_env_file=None, whatsapp_token="t", meta_app_secret="t", gemini_api_key="t",
                         webhook_verify_token="x" * 32, whatsapp_phone_number_id="123",
-                        allowed_senders="22670000000", supabase_url="https://project.supabase.co",
-                        supabase_api_key="t", idle_shutdown_seconds=1, **database)
+                        allowed_senders="22670000000", aws_access_key_id="test-key",
+                        aws_secret_access_key="test-secret", idle_shutdown_seconds=1, **database)
     app = main.create_app(settings)
     app.state.request_shutdown = lambda: stops.append(True)
     with TestClient(app) as client:
@@ -53,8 +53,8 @@ def test_active_analysis_survives_idle_shutdown_threshold(database):
 
     settings = Settings(_env_file=None, whatsapp_token="t", meta_app_secret="t", gemini_api_key="t",
                         webhook_verify_token="x" * 32, whatsapp_phone_number_id="123",
-                        allowed_senders="22670000000", supabase_url="https://project.supabase.co",
-                        supabase_api_key="t", idle_shutdown_seconds=1, **database)
+                        allowed_senders="22670000000", aws_access_key_id="test-key",
+                        aws_secret_access_key="test-secret", idle_shutdown_seconds=1, **database)
     app = main.create_app(settings)
     stops = []
     app.state.request_shutdown = lambda: stops.append(True)

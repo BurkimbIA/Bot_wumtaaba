@@ -15,9 +15,10 @@ RUN groupadd --gid 10001 bot && useradd --uid 10001 --gid bot --home-dir /app bo
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
+COPY scripts/import_annotation_previews.py scripts/migrate_audio_to_tigris.py ./scripts/
 RUN uv sync --locked --no-dev --no-editable
 
-# Stateless: data and audio live in Supabase, so nothing needs root at start.
+# Stateless: metadata lives in Supabase; audio lives in private Tigris storage.
 USER bot
 EXPOSE 8000
 CMD ["python", "-m", "bot_wumtaaba.server"]

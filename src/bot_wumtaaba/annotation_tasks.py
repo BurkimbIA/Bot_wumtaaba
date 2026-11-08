@@ -7,6 +7,8 @@ import time
 
 
 async def register_task(store, media, task_id, sample, audio, mime="audio/flac"):
+    if getattr(media, "provider", None) != "tigris" or not getattr(media, "bucket", None):
+        raise ValueError("Le stockage Tigris des annotations est requis")
     if (
         not re.fullmatch(r"[0-9]{3}", task_id)
         or not isinstance(audio, bytes)
@@ -24,24 +26,38 @@ async def register_task(store, media, task_id, sample, audio, mime="audio/flac")
         for k in ("A", "B")
     ):
         raise ValueError("Les deux propositions et leurs modèles sont requis")
-    path = f"annotations/{digest}.audio"
+    path = f"wuumtaaba/annotations/{digest}.audio"
     await media.put(path, audio, mime)
     restored = await media.get(path)
     if restored is None or hashlib.sha256(restored).hexdigest() != digest:
         raise ValueError("Audio non confirmé dans le stockage privé")
+    await media.verify_private(path)
     with store.lock, store.db:
         store.db.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", ("annotation-task:" + task_id,))
         old = store.db.execute(
-            "SELECT sample,audio_path FROM annotation_tasks WHERE task_id=%s", (task_id,)
+            "SELECT sample,audio_path,audio_bucket FROM annotation_tasks WHERE task_id=%s", (task_id,)
         ).fetchone()
         if old:
-            if json.loads(old["sample"]) != sample or old["audio_path"] != path:
+            if (
+                json.loads(old["sample"]) != sample
+                or old["audio_path"] != path
+                or old["audio_bucket"] != media.bucket
+            ):
                 raise ValueError("Identifiant de tâche déjà utilisé pour une autre source")
         else:
             store.db.execute(
-                "INSERT INTO annotation_tasks(task_id,sample,audio_path,audio_sha256,audio_mime,created_at) "
-                "VALUES(%s,%s,%s,%s,%s,%s)",
-                (task_id, json.dumps(sample, ensure_ascii=False), path, digest, mime, time.time()),
+                "INSERT INTO annotation_tasks(task_id,sample,audio_bucket,audio_path,audio_sha256,"
+                "audio_mime,audio_size_bytes,created_at) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    task_id,
+                    json.dumps(sample, ensure_ascii=False),
+                    media.bucket,
+                    path,
+                    digest,
+                    mime,
+                    len(audio),
+                    time.time(),
+                ),
             )
     return path
 

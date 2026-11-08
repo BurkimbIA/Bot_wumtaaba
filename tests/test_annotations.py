@@ -54,8 +54,9 @@ def assign(store, sender=OWNER, task="002"):
             "UPDATE outbox SET status='sent',remote_id=%s WHERE id=%s", (f"wamid.fixture.{outbox}", outbox)
         )
         store.db.execute(
-            "INSERT INTO annotation_tasks(task_id,kind,sample,audio_path,audio_sha256,audio_mime,created_at) "
-            "VALUES(%s,'asr_preference',%s,%s,%s,'audio/flac',%s) ON CONFLICT DO NOTHING",
+            "INSERT INTO annotation_tasks(task_id,kind,sample,audio_path,audio_sha256,audio_mime,"
+            "audio_size_bytes,created_at) "
+            "VALUES(%s,'asr_preference',%s,%s,%s,'audio/flac',1,%s) ON CONFLICT DO NOTHING",
             (task, json.dumps(SAMPLE), f"annotations/{task}/audio.flac", SAMPLE["sha256"], now),
         )
         store.db.execute(

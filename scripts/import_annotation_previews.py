@@ -1,4 +1,4 @@
-"""Import previously sent annotation examples into Supabase; never send WhatsApp messages.
+"""Import task metadata into Supabase and audio into Tigris; never send WhatsApp messages.
 
 Default: read-only plan. --apply creates the schema, archives HF audio privately and
 registers verified sent assignments. No task source or response is written to local disk.
@@ -7,7 +7,6 @@ registers verified sent assignments. No task source or response is written to lo
 import argparse
 import asyncio
 import json
-from urllib.parse import quote
 
 import httpx
 import psycopg
@@ -15,7 +14,7 @@ from psycopg import sql
 
 from bot_wumtaaba.annotation_tasks import assign_sent_previews, register_task
 from bot_wumtaaba.config import Settings
-from bot_wumtaaba.media import MediaStore
+from bot_wumtaaba.tigris import TigrisAudioStore
 from bot_wumtaaba.store import Store
 
 
@@ -61,16 +60,7 @@ async def main(apply=False):
         store = Store(settings.database_url.get_secret_value(), settings.database_schema)
         try:
             async with httpx.AsyncClient(timeout=60, follow_redirects=False) as http:
-                media = MediaStore(settings, http)
-                bucket = await http.get(
-                    settings.supabase_url.rstrip("/")
-                    + "/storage/v1/bucket/"
-                    + quote(settings.media_bucket, safe=""),
-                    headers=media.headers,
-                )
-                bucket.raise_for_status()
-                if bucket.json().get("public") is not False:
-                    raise ValueError("Le bucket des annotations doit être privé")
+                media = TigrisAudioStore(settings, http)
                 for task_id, sample in samples.items():
                     response = await http.get(
                         "https://datasets-server.huggingface.co/rows",

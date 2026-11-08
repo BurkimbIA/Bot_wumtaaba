@@ -1,5 +1,4 @@
 import base64
-from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -13,13 +12,9 @@ AUTH = {"X-Admin": "yes", "Origin": "https://testserver"}
 
 
 class Bucket:
-    url = "https://private.supabase.co/storage/v1/object/private/"
-    headers = {"apikey": "do-not-expose"}
-
     def __init__(self):
         self.objects = {}
         self.fail_put = self.fail_delete = False
-        self.http = SimpleNamespace(delete=self.delete)
 
     async def put(self, path, data, mime):
         if self.fail_put:
@@ -29,14 +24,15 @@ class Bucket:
     async def get(self, path):
         return self.objects.get(path, (None,))[0]
 
-    async def delete(self, url, headers):
-        assert headers == self.headers
-        assert url.startswith(self.url + "experiments/")
-        request = httpx.Request("DELETE", url)
+    async def delete(self, path):
+        assert path.startswith("experiments/")
         if self.fail_delete:
-            return httpx.Response(503, request=request)
-        self.objects.pop(url.removeprefix(self.url), None)
-        return httpx.Response(200, request=request)
+            raise httpx.HTTPStatusError(
+                "unavailable", request=httpx.Request("DELETE", "https://t3.storage.dev"),
+                response=httpx.Response(503),
+            )
+        self.objects.pop(path, None)
+
 
 
 @pytest.fixture

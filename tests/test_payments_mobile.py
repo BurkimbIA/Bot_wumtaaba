@@ -164,8 +164,8 @@ def test_persistence_of_ledger_after_reopening(make_store):
 def api(database):
     settings = Settings(
         **database,
-        supabase_url="https://project.supabase.co",
-        supabase_api_key="test",
+        aws_access_key_id="test-key",
+        aws_secret_access_key="test-secret",
         public_access=True,
         whatsapp_token="test",
         meta_app_secret="test",

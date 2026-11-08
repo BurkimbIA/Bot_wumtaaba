@@ -37,12 +37,22 @@ Les quatre tables sont créées dans le schéma configuré par `DATABASE_SCHEMA`
 | `annotation_responses` | Préférence, notes A/B, correction éventuelle, état, snapshot de la source et dernier message traité |
 | `annotation_events` | Historique des réponses appliquées, lié à l’identifiant unique du message entrant |
 
-Les octets audio vont dans le **bucket privé Supabase Storage existant**, sous
-`annotations/<sha256>.audio`. La table garde le chemin et l’empreinte ; aucun
-fichier de données n’est conservé sur le disque du conteneur Fly. Le code de ce
-parcours n’utilise ni SQLite ni localStorage. L’audio est relu depuis Storage et
-son empreinte vérifiée avant que la tâche soit enregistrée. Les tâches sont
-immuables : un même identifiant ne peut pas recevoir un autre snapshot.
+Tous les audios du bot (annotations, accords et expériences du back-office)
+vont dans le **bucket privé Tigris `burkimbia-store`**. Les annotations utilisent
+`wuumtaaba/annotations/<sha256>.audio` ; les autres médias utilisent
+`wuumtaaba/media/<chemin logique existant>`. Supabase conserve les annotations,
+les références, le type MIME, la taille et les empreintes. Le bot n’écrit plus
+d’audio dans Supabase Storage. Les chemins logiques des accords restent compatibles.
+
+Les fichiers sont privés ; les accès passent par les routes authentifiées.
+Les annotations sont relues et leur empreinte vérifiée avant l’enregistrement.
+Les sources sont immuables. Aucune URL temporaire n’est stockée comme référence
+durable. Aucun audio n’est conservé sur le disque du conteneur Fly.
+
+Migration : `python scripts/migrate_audio_to_tigris.py`, puis `--apply`.
+Le script vérifie les octets et le caractère privé de chaque objet Tigris.
+Il ne supprime pas les originaux Supabase : leur suppression est une opération
+distincte après validation. Les quotas du bucket partagé ne sont pas dédiés au bot.
 
 Les réponses, l’état conversationnel et l’accusé sortant sont enregistrés dans
 la même transaction que la fin du message entrant. Si la sauvegarde échoue,
@@ -79,10 +89,8 @@ ou d’export central des annotations dans cette PR.
 
 ## Conditions avant un passage en production
 
-- Réconcilier la branche principale avec les modifications actuellement déployées
-  hors de cette branche : le portail de production diffère de `main`. Cette PR
-  n’embarque pas ces autres modifications. La fusion sur `main` déclenche le
-  déploiement automatique existant ; ne pas fusionner sans vérifier cette base.
+- La branche intègre `main`, y compris Check et les accords de la PR #6.
+- Configurer les secrets Tigris et migrer les fichiers avant de basculer le lecteur.
 - Déployer le code approuvé, puis exécuter l’import explicite côté serveur.
 - Vérifier les quatre tables dans Supabase, le caractère privé du bucket et la
   présence des fichiers référencés. Refaire une annotation, puis la relire avec

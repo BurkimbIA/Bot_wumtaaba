@@ -23,6 +23,17 @@ SAMPLE = {
 }
 
 
+@pytest.fixture(autouse=True)
+def annotation_storage(media):
+    media.provider = "tigris"
+    media.bucket = "burkimbia-store"
+
+    async def private(key):
+        return None
+
+    media.verify_private = private
+
+
 async def seed(store, media):
     await register_task(store, media, "002", SAMPLE, AUDIO)
     card = {
@@ -63,6 +74,8 @@ async def test_complete_result_and_source_survive_reopening_database(store, make
     reopened = make_store()
     task = reopened.db.execute("SELECT * FROM annotation_tasks WHERE task_id='002'").fetchone()
     assert json.loads(task["sample"]) == SAMPLE
+    assert task["audio_provider"] == "tigris" and task["audio_bucket"] == "burkimbia-store"
+    assert task["audio_size_bytes"] == len(AUDIO)
     assert await media.get(task["audio_path"]) == AUDIO
     response = reopened.db.execute(
         "SELECT * FROM annotation_responses WHERE recipient=%s", (OWNER,)
@@ -78,6 +91,9 @@ async def test_complete_result_and_source_survive_reopening_database(store, make
 
 async def test_failed_private_storage_verification_does_not_register_task(store):
     class BrokenStorage:
+        provider = "tigris"
+        bucket = "burkimbia-store"
+
         async def put(self, *args):
             pass
 

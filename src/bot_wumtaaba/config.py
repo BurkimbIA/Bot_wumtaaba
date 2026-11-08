@@ -29,6 +29,13 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_api_key: SecretStr = SecretStr("")
     media_bucket: str = "wuumtaaba-media"
+    # All bot, experiment and annotation audio uses the existing private Tigris bucket.
+    annotation_bucket: str = "burkimbia-store"
+    aws_endpoint_url_s3: str = "https://t3.storage.dev"
+    aws_region: str = "auto"
+    aws_access_key_id: SecretStr = SecretStr("")
+    aws_secret_access_key: SecretStr = SecretStr("")
+    aws_session_token: SecretStr = SecretStr("")
     # 0 = never; on Fly the bot stops itself once idle, and the next request starts it again.
     idle_shutdown_seconds: int = Field(default=0, ge=0)
     public_access: bool = False
@@ -50,10 +57,8 @@ class Settings(BaseSettings):
     def validate_live(self) -> None:
         missing = [key for key in (
             "whatsapp_token", "meta_app_secret", "webhook_verify_token", "gemini_api_key",
-            "database_url", "supabase_api_key",
+            "database_url", "aws_access_key_id", "aws_secret_access_key",
         ) if not getattr(self, key).get_secret_value()]
-        if not self.supabase_url.startswith("https://"):
-            missing.append("supabase_url")
         if not self.whatsapp_phone_number_id.isdigit():
             missing.append("whatsapp_phone_number_id")
         if (not self.public_access and not self.senders) or not all(s.isdigit() for s in self.senders):

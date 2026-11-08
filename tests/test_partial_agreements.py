@@ -101,7 +101,7 @@ def test_admin_aggregates_do_not_assume_missing_paid_is_zero(store):
 @pytest.fixture
 def api(database):
     settings = Settings(
-        **database, supabase_url="https://project.supabase.co", supabase_api_key="test",
+        **database, aws_access_key_id="test-key", aws_secret_access_key="test-secret",
         public_access=True, whatsapp_token="test", meta_app_secret="test",
         webhook_verify_token="x" * 32, gemini_api_key="test", whatsapp_phone_number_id="12345",
     )

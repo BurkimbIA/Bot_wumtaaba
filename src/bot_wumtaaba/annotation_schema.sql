@@ -2,7 +2,10 @@
 -- Audio bytes belong to the existing private Supabase Storage bucket.
 CREATE TABLE IF NOT EXISTS annotation_tasks (
     task_id TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'asr_preference', sample TEXT NOT NULL,
+    audio_provider TEXT NOT NULL DEFAULT 'tigris' CHECK(audio_provider='tigris'),
+    audio_bucket TEXT NOT NULL DEFAULT 'burkimbia-store',
     audio_path TEXT NOT NULL, audio_sha256 TEXT NOT NULL, audio_mime TEXT NOT NULL,
+    audio_size_bytes BIGINT NOT NULL CHECK(audio_size_bytes>0),
     created_at DOUBLE PRECISION NOT NULL, enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)));
 CREATE TABLE IF NOT EXISTS annotation_assignments (
     recipient TEXT NOT NULL, task_id TEXT NOT NULL REFERENCES annotation_tasks(task_id),

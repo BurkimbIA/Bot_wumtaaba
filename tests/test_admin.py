@@ -8,8 +8,8 @@ def config(database, **extra):
     return Settings(_env_file=None, whatsapp_token='test', meta_app_secret='test',
                     webhook_verify_token='x'*32, gemini_api_key='test',
                     whatsapp_phone_number_id='123', allowed_senders='22670000000',
-                    **database, supabase_url='https://project.supabase.co',
-                    supabase_api_key='test', admin_password='test-password-'+'x'*32,
+                    **database, aws_access_key_id='test-key',
+                    aws_secret_access_key='test-secret', admin_password='test-password-'+'x'*32,
                     **extra)
 
 

@@ -33,6 +33,10 @@ jobs:
         timeout-minutes: 3
         run: |
           if ! command -v ffmpeg >/dev/null 2>&1; then
+            # Avoid the Azure mirror when its DNS is unavailable; keep Ubuntu's signed repositories.
+            if [ -f /etc/apt/apt-mirrors.txt ]; then
+              printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            fi
             sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
             sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg
           fi

@@ -75,7 +75,37 @@ Les modèles BurkimbIA restent utilisés pour les accords en mooré : transcript
 
 Les données passent du SQLite du volume Fly.io à Postgres chez Supabase (projet de bia-backend, schéma `wuumtaaba`), et les audios à un bucket privé du même projet. Sans volume, la machine s’arrête d’elle-même quand sa file est vide et repart à la requête suivante ; Supabase la réveille chaque jour à 9 h pour les rappels. Voir [la base](docs/DATABASE.md), dont la copie du volume, et [le déploiement](docs/DEPLOY_FLY.md).
 
-## Démarrer en local
+## Développer le backoffice et tester le bot
+
+Avec Docker lancé, [uv](https://docs.astral.sh/uv/) et [just](https://just.systems) installés :
+
+```sh
+just install
+just dev
+```
+
+Ouvrir **[le backoffice local](http://127.0.0.1:8000/admin)**. Le code d’accès
+local est `ADMIN_PASSWORD` dans le fichier privé `.env.dev`, créé automatiquement.
+Les modifications du code relancent le serveur ; recharger la page pour les assets.
+
+La navigation regroupe **Accords, échéances et rappels**, **Conversations WhatsApp**,
+**Annotations**, **Wumtaaba Check** et **Modèles IA**. La page supplémentaire
+**[Simulateur WhatsApp](http://127.0.0.1:8000/admin/simulator)** est réservée au dev :
+elle exécute le parcours du bot avec des sessions et des accords de test isolés.
+
+Le dev sert les mêmes fichiers d’interface que la production. Sa base PostgreSQL
+locale persistante reprend les **23 tables du schéma applicatif Supabase**, leurs
+contraintes, fonctions, index et politiques RLS, sans importer les données clients.
+Les audios dev restent sur le disque local. Aucun worker WhatsApp ne démarre.
+Voir [le fonctionnement du dev et des modèles](docs/DEV_RUNTIME.md).
+
+Les changements de structure sont versionnés dans `migrations/`, testés en local,
+puis appliqués explicitement en production avec le code validé. Voir
+[les migrations et la vérification du schéma](docs/DEV_DATABASE.md).
+La publication utilise le déploiement du dépôt : sélectionner une page à modifier
+limite le diff, mais Fly.io déploie le conteneur complet.
+
+## Démarrer le serveur WhatsApp connecté
 
 Il faut [uv](https://docs.astral.sh/uv/) et [just](https://just.systems) ; uv installe Python 3.12.
 

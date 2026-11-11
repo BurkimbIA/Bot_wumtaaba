@@ -1,0 +1,8 @@
+{
+  "schema": "wuumtaaba",
+  "baseline": "0001_production_baseline.sql",
+  "fingerprint": "3fd1f65340985646c31b6b0b972990924a842fee7ca1033b682699e37ba85f62",
+  "exported_at": "2026-11-11",
+  "data_included": false,
+  "ownership_and_grants": "environment-specific; not copied"
+}

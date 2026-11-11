@@ -1,0 +1,18 @@
+services:
+  database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: wumtaaba_dev
+      POSTGRES_USER: wumtaaba_dev
+      POSTGRES_PASSWORD: ${DEV_DATABASE_PASSWORD:?Configurer .env.dev}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - wumtaaba-dev-database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wumtaaba_dev -d wumtaaba_dev"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+volumes:
+  wumtaaba-dev-database:

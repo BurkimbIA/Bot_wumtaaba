@@ -17,34 +17,78 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports: ['5432:5432']
         options: >-
-          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      TMPDIR: /tmp
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
       - uses: extractions/setup-just@v3
-      - name: Installer FFmpeg
-        timeout-minutes: 3
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Vérifier la construction de l’image
+        run: docker build -t bot-wumtaaba:ci .
+      - name: Utiliser le FFmpeg de production pour les tests audio
+        run: |
+          cat > "$RUNNER_TEMP/ffmpeg-from-image" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --label "wuumtaaba.ci-audio=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --volume /tmp:/tmp bot-wumtaaba:ci ffmpeg "$@"
+          SH
+          chmod 755 "$RUNNER_TEMP/ffmpeg-from-image"
+          echo "FFMPEG_BINARY=$RUNNER_TEMP/ffmpeg-from-image" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/ffmpeg-from-image" -version
       - run: just install
       - run: just lint
       - run: just test
-      - name: Vérifier la construction de l’image
-        run: docker build -t bot-wumtaaba:ci .
+      - name: Vérifier les interfaces du laboratoire et du backoffice
+        run: node --test tests/test_admin_shell.cjs tests/test_check_ui.cjs
+      - name: Nettoyer les conversions audio du job
+        if: always()
+        run: docker ps -aq --filter "label=wuumtaaba.ci-audio=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" | xargs -r docker rm -f
   deploy:
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: production
+      url: https://bot-wumtaaba.fly.dev/admin
     concurrency:
       group: fly-production-bot-wumtaaba
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+      - name: Vérifier la configuration de production sans afficher les secrets
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          if not os.environ.get('FLY_API_TOKEN'):
+              raise SystemExit('Secret GitHub FLY_API_TOKEN absent.')
+          result = subprocess.run(
+              ['flyctl', 'secrets', 'list', '--app', 'bot-wumtaaba', '--json'],
+              check=True, capture_output=True, text=True,
+          )
+          names = {item['name'] for item in json.loads(result.stdout)}
+          required = {
+              'DATABASE_URL', 'ADMIN_PASSWORD', 'WHATSAPP_TOKEN',
+              'WHATSAPP_PHONE_NUMBER_ID', 'META_APP_SECRET', 'WEBHOOK_VERIFY_TOKEN',
+              'GEMINI_API_KEY', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY',
+          }
+          missing = required - names
+          if missing:
+              raise SystemExit('Secrets Fly manquants : ' + ', '.join(sorted(missing)))
+          print('Secrets de production présents. La migration utilisera DATABASE_URL sur Fly.')
+          PY
       - name: Déployer sur Fly.io
         run: flyctl deploy --remote-only --ha=false --app bot-wumtaaba
         env:
@@ -52,3 +96,12 @@ jobs:
       - name: Vérifier le service déployé
         run: |
           curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 https://bot-wumtaaba.fly.dev/healthz | python -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"'
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin)" = 200
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin/api/overview)" = 401
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin/simulator)" = 401
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data '{}' https://bot-wumtaaba.fly.dev/admin/api/simulator/session)" = 401
+      - name: Résumer la publication
+        env:
+          DEPLOYED_SHA: ${{ github.sha }}
+        run: |
+          echo "Production publiée : ${DEPLOYED_SHA}. Migrations Fly terminées, backoffice disponible et simulateur protégé par session admin." >> "$GITHUB_STEP_SUMMARY"

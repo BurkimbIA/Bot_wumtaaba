@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS experiments (
     results TEXT NOT NULL DEFAULT '[]');
 CREATE INDEX IF NOT EXISTS experiments_created ON experiments(created_at DESC, id);
 
+-- Admin cookies remain valid when Fly stops and restarts the application.
+-- Only token digests are stored; credential rotation invalidates existing sessions.
+CREATE TABLE IF NOT EXISTS admin_sessions (
+    token_hash TEXT PRIMARY KEY, credential_hash TEXT NOT NULL,
+    created_at DOUBLE PRECISION NOT NULL, expires_at DOUBLE PRECISION NOT NULL);
+CREATE INDEX IF NOT EXISTS admin_sessions_expiry ON admin_sessions(expires_at);
+
 -- Row level security on every table here. The bot owns them and bypasses it; any other role sees no row
 -- without a policy, even if this schema is one day exposed to Supabase's Data API. Keep this block last.
 DO $$

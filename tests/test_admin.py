@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from bot_wumtaaba.config import Settings
 from bot_wumtaaba.main import create_app
@@ -39,6 +40,53 @@ def test_admin_origin_and_bruteforce(database):
         for _ in range(10):
             assert client.post('/admin/login', json={'password':'wrong'}).status_code == 401
         assert client.post('/admin/login', json={'password':'wrong'}).status_code == 429
+
+
+def test_admin_session_lasts_thirty_days(database, monkeypatch):
+    import time
+
+    now = time.time()
+    monkeypatch.setattr('bot_wumtaaba.admin.time.time', lambda: now)
+    settings = config(database)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        response = client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        assert response.status_code == 200
+        assert 'Max-Age=2592000' in response.headers['set-cookie']
+        now += 29 * 24 * 3600
+        assert client.get('/admin/api/environment').status_code == 200
+        now += 24 * 3600 + 1
+        assert client.get('/admin/api/environment').status_code == 401
+
+
+def test_admin_session_survives_restart_and_logout_is_durable(database):
+    import hashlib
+
+    settings = config(database)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        token = client.cookies.get('wuumtaaba_admin')
+        row = client.app.state.store.db.execute('SELECT * FROM admin_sessions').fetchone()
+        assert row['token_hash'] == hashlib.sha256(token.encode()).hexdigest()
+        assert token not in str(row)
+    # Recreate both the application and its database connection, as on a Fly wake-up.
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        client.cookies.set('wuumtaaba_admin', token)
+        assert client.get('/admin/api/environment').status_code == 200
+        assert client.post('/admin/logout').status_code == 200
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        client.cookies.set('wuumtaaba_admin', token)
+        assert client.get('/admin/api/environment').status_code == 401
+
+
+def test_admin_password_change_invalidates_persistent_session(database):
+    settings = config(database)
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        client.post('/admin/login', json={'password': settings.admin_password.get_secret_value()})
+        token = client.cookies.get('wuumtaaba_admin')
+    settings = settings.model_copy(update={'admin_password': SecretStr('new-password-' + 'z'*32)})
+    with TestClient(create_app(settings, run_worker=False), base_url='https://testserver') as client:
+        client.cookies.set('wuumtaaba_admin', token)
+        assert client.get('/admin/api/environment').status_code == 401
 
 
 def test_admin_disabled_by_default(database):
@@ -146,5 +194,6 @@ def test_check_uses_admin_session_and_private_assets(database):
             assert response.headers['x-content-type-options'] == 'nosniff'
         assert client.get('/admin/check/assets/admin.py').status_code == 404
         shell = client.get('/admin').text
-        assert 'class="check-cta" href="/admin/check"' in shell
-        assert 'class="check-link" href="/admin/check"' in shell
+        assert 'data-admin-sidebar' in shell
+        assert '/admin/assets/admin-shell.js' in shell
+        assert client.get('/admin/assets/admin-shell.js').status_code == 200

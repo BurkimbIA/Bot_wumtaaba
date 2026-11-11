@@ -1,4 +1,4 @@
-"""Back-office privé, sélection du fournisseur et sessions administrateur éphémères."""
+"""Back-office privé, sélection du fournisseur et sessions administrateur persistantes."""
 
 import base64
 import hashlib
@@ -17,21 +17,23 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from starlette.background import BackgroundTask
 
 from . import admin_data
+from .admin_annotations import install_admin_annotations
 from .experiments import install_experiments
 from .check_inference import install_check_inference
 
 
 def install_admin(app, settings):
     router = APIRouter(prefix="/admin")
-    sessions = {}
     attempts = deque(maxlen=30)
     cookie = "wuumtaaba_admin"
-    ttl = 8 * 3600
+    ttl = 30 * 24 * 3600
+    credential_hash = hashlib.sha256(settings.admin_password.get_secret_value().encode()).hexdigest()
 
     def authorized(request):
         token = request.cookies.get(cookie, "")
-        expiry = sessions.get(hashlib.sha256(token.encode()).hexdigest(), 0)
-        if not token or expiry < time.time():
+        if not token or not request.app.state.store.admin_session_valid(
+            hashlib.sha256(token.encode()).hexdigest(), credential_hash, time.time()
+        ):
             raise HTTPException(401, "Connexion administrateur requise")
 
     def same_origin(request):
@@ -47,11 +49,23 @@ def install_admin(app, settings):
         html = (Path(__file__).parent / "static" / "admin.html").read_text()
         hashes = ["'sha256-" + base64.b64encode(hashlib.sha256(x.encode()).digest()).decode() + "'"
                   for x in re.findall(r"<(?:script|style)>(.*?)</(?:script|style)>", html, re.DOTALL)]
-        policy = ("default-src 'none'; script-src " + " ".join(hashes) +
-                  "; style-src " + " ".join(hashes) + "; connect-src 'self'; media-src 'self'; "
+        policy = ("default-src 'none'; script-src 'self' " + " ".join(hashes) +
+                  "; style-src 'self' " + " ".join(hashes) + "; connect-src 'self'; media-src 'self'; "
                   "img-src 'self' data:; font-src 'self'; frame-ancestors 'none'; "
                   "base-uri 'none'; form-action 'self'")
         return HTMLResponse(html, headers={"Content-Security-Policy": policy})
+
+    @router.get("/assets/{asset}")
+    async def shared_asset(asset: str):
+        types = {"admin-shell.js": "text/javascript", "admin-shell.css": "text/css"}
+        if asset not in types:
+            raise HTTPException(404, "Fichier introuvable")
+        return FileResponse(Path(__file__).parent / "static" / asset, media_type=types[asset])
+
+    @router.get("/api/environment")
+    async def environment(request: Request):
+        authorized(request)
+        return {"environment": getattr(request.app.state, "environment", "production")}
 
     @router.get("/check")
     async def check_page(request: Request):
@@ -102,13 +116,10 @@ def install_admin(app, settings):
             hashlib.sha256(password.encode()).digest(), hashlib.sha256(secret.encode()).digest()
         ):
             raise HTTPException(401, "Code d’accès incorrect")
-        for key in list(sessions):
-            if sessions[key] <= now:
-                del sessions[key]
-        if len(sessions) >= 20:
-            sessions.pop(next(iter(sessions)))
         token = secrets.token_urlsafe(32)
-        sessions[hashlib.sha256(token.encode()).hexdigest()] = now + ttl
+        request.app.state.store.create_admin_session(
+            hashlib.sha256(token.encode()).hexdigest(), credential_hash, now, now + ttl
+        )
         response = JSONResponse({"ok": True})
         response.set_cookie(cookie, token, max_age=ttl, httponly=True,
                             secure=settings.admin_cookie_secure, samesite="strict", path="/admin")
@@ -117,7 +128,9 @@ def install_admin(app, settings):
     @router.post("/logout")
     async def logout(request: Request):
         same_origin(request)
-        sessions.pop(hashlib.sha256(request.cookies.get(cookie, "").encode()).hexdigest(), None)
+        request.app.state.store.delete_admin_session(
+            hashlib.sha256(request.cookies.get(cookie, "").encode()).hexdigest()
+        )
         response = JSONResponse({"ok": True})
         response.delete_cookie(cookie, path="/admin", secure=settings.admin_cookie_secure,
                                httponly=True, samesite="strict")
@@ -211,6 +224,9 @@ def install_admin(app, settings):
             response.headers["X-Frame-Options"] = "DENY"
         return response
 
+    install_admin_annotations(router, settings, authorized)
     install_experiments(router, authorized, same_origin)
     install_check_inference(router, settings, authorized, same_origin)
+    from .dev_simulator import install_simulator
+    install_simulator(router, settings, authorized, same_origin)
     app.include_router(router)

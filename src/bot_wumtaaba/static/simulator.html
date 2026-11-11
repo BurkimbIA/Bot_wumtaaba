@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wuumtaaba · Conversation de test</title>
+  <link rel="stylesheet" href="/admin/simulator/assets/simulator.css">
+  <script src="/admin/simulator/assets/simulator.js" defer></script>
+<link rel="stylesheet" href="/admin/assets/admin-shell.css"><script src="/admin/assets/admin-shell.js" defer></script>
+</head>
+<body class="admin-workspace">
+<aside data-admin-sidebar></aside>
+<header class="page-header">
+  <a class="brand" href="/admin">B<span>BurkimbIA <small>SIMULATEUR WHATSAPP</small></span></a>
+  <a href="/admin/check">Outils détaillés des modèles ↗</a>
+
+</header>
+<main>
+  <section class="intro">
+    <p class="eyebrow">WUUMTAABA · CONVERSATION SIMULÉE</p>
+    <h1>Testez la conversation.</h1>
+    <p>Les mêmes messages, menus et confirmations que le bot WhatsApp. Les modèles restent à votre main.</p>
+  </section>
+  <p class="isolation"><span aria-hidden="true">◉</span> Essai isolé : les accords restent dans cette session. Aucun message WhatsApp ni enregistrement dans le carnet réel.</p>
+  <div class="workspace">
+    <section class="phone" aria-label="Conversation Wuumtaaba simulée">
+      <header class="chat-header">
+        <span class="avatar" aria-hidden="true">W</span>
+        <div><h2>Wuumtaaba</h2><p>Conversation de test</p></div>
+        <span class="test-badge">LAB</span>
+      </header>
+      <div class="chat-toolbar" aria-label="Commandes rapides">
+        <button data-control data-command="menu" type="button">Menu</button>
+        <button data-control data-command="aide" type="button">Aide</button>
+        <button data-control data-command="calendrier" type="button">Calendrier</button>
+      </div>
+      <div id="chat" role="log" aria-live="polite" aria-relevant="additions" aria-label="Messages de la conversation"></div>
+      <p id="chat-status" class="chat-status" role="status">Ouverture de la conversation…</p>
+      <p id="chat-error" class="chat-error" role="alert" hidden></p>
+      <div id="audio-preview" class="audio-preview" hidden>
+        <div><strong id="audio-name">Vocal prêt</strong><button id="discard-audio" data-control type="button" aria-label="Retirer le vocal">Retirer</button></div>
+        <audio id="input-audio" controls></audio>
+        <p>Écoutez puis appuyez sur « Envoyer le vocal ».</p>
+      </div>
+      <form id="composer" class="composer">
+        <label class="sr-only" for="message">Votre message au bot</label>
+        <textarea id="message" data-control maxlength="4096" rows="2" placeholder="Écrivez votre message…"></textarea>
+        <div class="composer-actions">
+          <button id="record" type="button" title="Enregistrer un vocal">● Vocal</button>
+          <label class="file-button" for="audio-file">Joindre un audio<input id="audio-file" data-control type="file" accept="audio/*"></label>
+          <button id="send" data-control type="submit" class="send">Envoyer <span aria-hidden="true">↗</span></button>
+        </div>
+        <p id="record-status" class="record-status" role="status">Le micro est éteint. Aucun audio n’est envoyé automatiquement.</p>
+      </form>
+    </section>
+    <aside class="inspector" aria-label="Modèles et résultats de cet essai">
+      <section class="panel">
+        <p class="eyebrow">RÉGLAGES DE CET ESSAI</p>
+        <h2>Choisissez les modèles</h2>
+        <label for="provider">Exécution BurkimbIA<select id="provider" data-control><option value="mac">Mac connecté</option></select></label>
+        <label for="transcription-model">Modèle de transcription<select id="transcription-model" data-control></select></label>
+        <label for="mo-fr-model">Modèle mooré → français<select id="mo-fr-model" data-control></select></label>
+        <button id="compare-audio" data-control type="button" class="reuse-audio">Comparer ce vocal avec ces modèles</button>
+        <p class="muted">Le dernier vocal est conservé dans cette page. Pour comparer la transcription mooré et sa traduction française, changez les modèles puis comparez : les résultats s’ajoutent ci-dessous, sans modifier la conversation.</p>
+        <button id="reuse-audio" data-control type="button" class="reuse-audio">Reprendre le dernier vocal</button>
+        <p id="models-note" class="muted">Chargement des modèles…</p>
+        <p id="availability" class="availability" role="status">Vérification du Mac…</p>
+        <p class="muted">Ces choix s’appliquent au prochain message et ne changent pas le bot en production. L’extraction du brouillon utilise Gemini.</p>
+      </section>
+      <section class="panel results-panel">
+        <div class="panel-heading"><div><p class="eyebrow">CE QUI SE PASSE DERRIÈRE</p><h2>Résultats des modèles</h2></div><span id="stage-count" class="counter">0</span></div>
+        <p id="stages-empty" class="muted">La transcription, la traduction et l’extraction apparaîtront ici après vos messages.</p>
+        <div id="stages" aria-live="polite"></div>
+      </section>
+      <section class="panel session-panel">
+        <h2>Votre session de test</h2>
+        <p id="session-ledger">Aucun accord de test enregistré.</p>
+        <p id="engine-info" class="muted"></p>
+        <button id="reset-session" data-control type="button">Recommencer tout l’essai</button>
+        <p class="muted">Efface uniquement cette conversation et son carnet de test. Recharger la page ouvre aussi une nouvelle session.</p>
+        <p class="muted">Les essais sont temporaires et disparaissent au redémarrage du serveur.</p>
+      </section>
+    </aside>
+  </div>
+</main>
+<footer>Le Mac exécute vos modèles locaux. Gemini et les modèles cloud reçoivent les contenus nécessaires aux appels que vous lancez ; les appels distants peuvent être facturés.</footer>
+</body>
+</html>

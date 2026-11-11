@@ -15,7 +15,8 @@ RUN groupadd --gid 10001 bot && useradd --uid 10001 --gid bot --home-dir /app bo
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
-COPY scripts/import_annotation_previews.py scripts/migrate_audio_to_tigris.py ./scripts/
+COPY scripts/import_annotation_previews.py scripts/migrate_audio_to_tigris.py scripts/dev_database.py ./scripts/
+COPY migrations ./migrations
 RUN uv sync --locked --no-dev --no-editable
 
 # Stateless: metadata lives in Supabase; audio lives in private Tigris storage.

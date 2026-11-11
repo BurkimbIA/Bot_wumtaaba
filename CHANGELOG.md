@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Simulateur WhatsApp accessible aux administrateurs en dev et en production, avec conversations, accords et audios de test isolés du carnet réel.
+- CI/CD avec tests PostgreSQL et JavaScript, vérification du contrat des migrations et migration Fly avant publication sur `main`. Les secrets de la base de production restent sur Fly.io.
+- Backoffice commun dev/prod avec navigation partagée, annotations administrateur et environnement local isolé basé sur le schéma réel de production.
 
 - Dedicated WhatsApp annotation routing for assigned A/B examples, ratings and optional corrections; task sources, assignments, response snapshots and idempotent events are stored in Postgres with RLS, and source audio is verified in private Tigris storage before registration.
 - Read-only planning and explicit import of the two annotation previews already sent, plus a review document describing task choices and the production persistence checks.
 
 ### Changed
+
+- La session administrateur passe de huit heures à 30 jours et persiste en base lors des arrêts/redémarrages Fly.io. La déconnexion et le changement du code administrateur la révoquent.
 
 - All bot audio (agreements, annotation sources and admin experiments) uses private Tigris `burkimbia-store`, with Supabase retaining database records and object references. A read-only/explicit-apply migration verifies existing audio without deleting its source.
 

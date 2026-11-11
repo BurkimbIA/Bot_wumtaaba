@@ -78,6 +78,34 @@ class Store:
         with self.lock, self.db:
             self.db.execute(SCHEMA)
 
+    def create_admin_session(self, token_hash, credential_hash, now, expires_at):
+        with self.lock, self.db:
+            self.db.execute(
+                "DELETE FROM admin_sessions WHERE expires_at<=%s OR credential_hash<>%s",
+                (now, credential_hash),
+            )
+            self.db.execute(
+                "DELETE FROM admin_sessions WHERE token_hash IN "
+                "(SELECT token_hash FROM admin_sessions ORDER BY created_at DESC,token_hash OFFSET 19)"
+            )
+            self.db.execute(
+                "INSERT INTO admin_sessions(token_hash,credential_hash,created_at,expires_at) "
+                "VALUES(%s,%s,%s,%s)",
+                (token_hash, credential_hash, now, expires_at),
+            )
+
+    def admin_session_valid(self, token_hash, credential_hash, now):
+        with self.lock:
+            return self.db.execute(
+                "SELECT EXISTS(SELECT 1 FROM admin_sessions "
+                "WHERE token_hash=%s AND credential_hash=%s AND expires_at>%s)",
+                (token_hash, credential_hash, now),
+            ).fetchone()[0]
+
+    def delete_admin_session(self, token_hash):
+        with self.lock, self.db:
+            self.db.execute("DELETE FROM admin_sessions WHERE token_hash=%s", (token_hash,))
+
     def enqueue(self, message_id, sender, message):
         now = time.time()
         with self.lock, self.db:

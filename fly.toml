@@ -9,7 +9,12 @@ kill_timeout = '30s'
 [processes]
   app = 'python -m bot_wumtaaba.server'
 
+[deploy]
+  release_command = 'python scripts/dev_database.py --from-environment --production apply --adopt-baseline'
+  release_command_timeout = '5m'
+
 [env]
+  DATABASE_SCHEMA = 'wuumtaaba'
   PUBLIC_ACCESS = 'true'
   RETENTION_DAYS = '0'
   REMINDER_ENABLED = 'true'

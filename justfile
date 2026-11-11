@@ -34,3 +34,11 @@ run:
 clean:
     find . -type d -name __pycache__ -exec rm -rf {} +
     rm -rf .pytest_cache .ruff_cache
+
+# Préparer la base de développement isolée (Docker doit être lancé)
+dev-db:
+    uv run python scripts/bootstrap_dev.py
+
+# Même backoffice que la production, avec base et médias locaux
+dev: dev-db
+    uv run python -m bot_wumtaaba.dev --port 8000 --reload

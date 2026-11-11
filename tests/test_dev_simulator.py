@@ -236,13 +236,14 @@ def test_session_capacity_and_expiration_are_explicit(client, monkeypatch):
     assert fresh["session_id"] != session["session_id"] and fresh["agreements"] == []
 
 
-def test_public_installer_is_dev_only_authenticated_and_origin_guarded():
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_public_installer_is_authenticated_and_origin_guarded(environment):
     from fastapi import APIRouter, HTTPException
     from bot_wumtaaba.config import Settings
-    from bot_wumtaaba.dev_simulator import install_dev_simulator
+    from bot_wumtaaba.dev_simulator import install_simulator
 
     app = FastAPI()
-    app.state.environment = "development"
+    app.state.environment = environment
     router = APIRouter(prefix="/admin")
 
     def authorized(request):
@@ -253,12 +254,13 @@ def test_public_installer_is_dev_only_authenticated_and_origin_guarded():
         if request.headers.get("origin") != "http://testserver":
             raise HTTPException(403)
 
-    install_dev_simulator(router, Settings(_env_file=None), authorized, origin, lambda s, h: Models())
+    install_simulator(router, Settings(_env_file=None), authorized, origin, lambda s, h: Models())
     app.include_router(router)
     with TestClient(app) as client:
         assert client.get("/admin/simulator").status_code == 401
         assert client.post("/admin/api/simulator/session", json={}).status_code == 401
         assert client.get("/admin/simulator/assets/simulator.js").status_code == 401
+        assert client.get("/admin/api/simulator/audio/missing/missing").status_code == 401
         assert (
             client.post("/admin/api/simulator/session", json={}, headers={"x-admin": "yes"}).status_code
             == 403
@@ -268,24 +270,28 @@ def test_public_installer_is_dev_only_authenticated_and_origin_guarded():
         assert result.status_code == 200 and result.json()["engine"]["simulation"]
         assert client.get("/admin/simulator", headers=auth).status_code == 200
         assert client.get("/admin/simulator/assets/simulator.js", headers=auth).status_code == 200
-        app.state.environment = "production"
-        assert client.post("/admin/api/simulator/session", json={}, headers=auth).status_code == 404
+        assert client.get("/admin/simulator/assets/recording-worklet.js", headers=auth).status_code == 200
+        assert client.get("/admin/simulator/assets/unknown.js", headers=auth).status_code == 404
+        assert client.post("/admin/api/simulator/reset", json={"session_id": result.json()["session_id"]},
+                           headers={"x-admin": "yes", "origin": "https://evil.example"}).status_code == 403
+        assert client.get("/admin/api/simulator/audio/missing/missing", headers=auth).status_code == 410
 
 
-def test_native_runner_uses_selected_checkpoint_through_request_context():
+@pytest.mark.parametrize("environment", ["development", "production"])
+def test_native_runner_uses_selected_checkpoint_through_request_context(environment):
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     from fastapi import APIRouter
     from bot_wumtaaba.config import Settings
-    from bot_wumtaaba.dev_simulator import install_dev_simulator
+    from bot_wumtaaba.dev_simulator import install_simulator
 
     app = FastAPI()
-    app.state.environment = "development"
+    app.state.environment = environment
     app.state.model_bridge = SimpleNamespace(
         submit=AsyncMock(side_effect=[{"text": "mooré complet"}, {"output": "vente complète"}])
     )
     router = APIRouter(prefix="/admin")
-    install_dev_simulator(
+    install_simulator(
         router, Settings(_env_file=None), lambda r: None, lambda r: None, lambda s, h: Models()
     )
     app.include_router(router)
@@ -311,3 +317,37 @@ def test_native_runner_uses_selected_checkpoint_through_request_context():
             app.state.model_bridge.submit.call_args_list[1].args[1]["model_id"]
             == "burkimbia/BIA-NLLB-600M-10E-CD-CRCL"
         )
+
+
+def test_production_simulator_confirms_agreement_without_real_store_writes(database, dump, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from bot_wumtaaba.config import Settings
+    from bot_wumtaaba.main import create_app
+
+    monkeypatch.setattr(bot_modules().clients, "Intelligence", lambda settings, http: Models())
+    settings = Settings(
+        _env_file=None, **database, whatsapp_token="test", meta_app_secret="test",
+        webhook_verify_token="x" * 32, gemini_api_key="test", whatsapp_phone_number_id="123",
+        public_access=True, aws_access_key_id="test", aws_secret_access_key="test",
+        admin_password="test-simulator-" + "x" * 32,
+    )
+    with TestClient(create_app(settings, run_worker=False), base_url="https://testserver") as client:
+        assert client.get("/admin/simulator").status_code == 401
+        assert client.post("/admin/login", json={"password": settings.admin_password.get_secret_value()}).status_code == 200
+        assert client.get("/admin/api/environment").json() == {"environment": "production"}
+        assert client.get("/admin/simulator").status_code == 200
+        store = client.app.state.store
+        before = dump(store)
+        provider = client.app.state.model_bridge.provider
+        whatsapp_send = AsyncMock(side_effect=AssertionError("Simulator must not send through Meta"))
+        monkeypatch.setattr(bot_modules().clients.WhatsApp, "send", whatsapp_send)
+        preview = send(client, draft(client, start(client)), text="vente complète")
+        saved = send(client, preview, action=button(preview, "confirm:"))
+        assert saved["agreements"][0]["client"] == "Awa"
+        assert saved["agreements"][0]["balance"] == 15000
+        assert saved["engine"]["simulation"] is True
+        assert send(client, start(client), action="list:0")["agreements"] == []
+        assert dump(store) == before
+        assert client.app.state.model_bridge.provider == provider
+        whatsapp_send.assert_not_called()

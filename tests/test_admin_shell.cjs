@@ -15,7 +15,7 @@ async function shell(pathname,search,environment='development',ok=true){
  const context={document:{createElement:()=>new Element(),querySelectorAll:selector=>selector==='[data-admin-sidebar]'?[target]:target.children.filter(x=>x.dataset.environment!==undefined)},location:{pathname,search},URLSearchParams,window:{},fetch:async()=>({ok,json:async()=>({environment})})};
  vm.runInNewContext(fs.readFileSync(path.join(root,'admin-shell.js'),'utf8'),context);await new Promise(resolve=>setImmediate(resolve));return {target,nav:target.children[2],api:context.window.AdminShell};
 }
-test('Development navigation adds the simulator to the five shared pages',async()=>{
+test('Shared navigation includes the simulator alongside the five business pages',async()=>{
  const h=await shell('/admin','?view=annotations');
  assert.equal(h.nav.children.length,6);assert.deepEqual(h.nav.children.map(a=>a.dataset.page),['agreements','conversations','annotations','check','models','simulator']);
  assert.equal(h.nav.children.filter(a=>a.attributes['aria-current']==='page').length,1);assert.equal(h.nav.children[2].attributes['aria-current'],'page');
@@ -32,8 +32,8 @@ test('Both rendered pages use the same shell assets and retain Check result DOM'
 });
 
 
-test('Production and unavailable environment never display the development simulator',async()=>{
- for(const h of [await shell('/admin','', 'production'),await shell('/admin','', 'development',false)]){assert.equal(h.nav.children.length,5);assert.equal(h.nav.children.some(a=>a.href==='/admin/simulator'),false);}
- const simulator=await shell('/admin/simulator','');assert.equal(simulator.api.current(),'simulator');assert.equal(simulator.nav.children[5].attributes['aria-current'],'page');
+test('Production and unavailable environment retain the simulator navigation',async()=>{
+ for(const h of [await shell('/admin','', 'production'),await shell('/admin','', 'development',false)]){assert.equal(h.nav.children.length,6);assert.equal(h.nav.children.some(a=>a.href==='/admin/simulator'),true);}
+ const simulator=await shell('/admin/simulator','','production');assert.equal(simulator.api.current(),'simulator');assert.equal(simulator.nav.children[5].attributes['aria-current'],'page');
  await simulator.api.refresh();assert.equal(simulator.nav.children.length,6);
 });

@@ -477,7 +477,7 @@ def _install_engine(app, config, runner, intelligence_factory=None):
             "stages": stages,
             "engine": {
                 "name": "Wuumtaaba WhatsApp",
-                "source": "Bot_wumtaaba — code local",
+                "source": "Bot_wumtaaba — moteur partagé",
                 "revision": modules.revision,
                 "simulation": True,
             },
@@ -543,15 +543,13 @@ def _install_engine(app, config, runner, intelligence_factory=None):
         return Response(item[0], media_type=item[1], headers={"Cache-Control": "no-store"})
 
 
-CURRENT_REQUEST = ContextVar("dev_simulator_request")
+CURRENT_REQUEST = ContextVar("simulator_request")
 
 
-def install_dev_simulator(router, settings, authorized, same_origin, intelligence_factory=None):
-    """Install only from the development app: admin cookies and origin checks still apply."""
+def install_simulator(router, settings, authorized, same_origin, intelligence_factory=None):
+    """Install the isolated simulator behind admin cookies and same-origin checks."""
 
     async def guard(request: Request):
-        if getattr(request.app.state, "environment", None) != "development":
-            raise HTTPException(404, "Simulateur disponible uniquement en développement.")
         authorized(request)
         if request.method != "GET":
             same_origin(request)
@@ -591,7 +589,7 @@ def install_dev_simulator(router, settings, authorized, same_origin, intelligenc
 
     async def runner(provider, task, payload):
         if provider != "mac":
-            raise HTTPException(422, "Ce simulateur de développement utilise les modèles du Mac.")
+            raise HTTPException(422, "Ce simulateur utilise les modèles du Mac.")
         from .check_inference import MAC_MODELS
 
         if task in {"transcribe", "translate"}:

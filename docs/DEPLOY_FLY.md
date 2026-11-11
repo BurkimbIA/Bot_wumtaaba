@@ -22,7 +22,8 @@ dans l’image et aucun identifiant Supabase n’est nécessaire dans GitHub Act
    secrets, sur une Machine temporaire. Tout échec bloque le déploiement. La
    baseline ne peut être adoptée que si l’empreinte réelle du schéma correspond.
 5. Le serveur est mis à jour, puis la CI vérifie la santé, la page admin, le refus
-   d’accès aux données sans session et l’absence du simulateur dev en production.
+   d’accès aux données et au simulateur sans session administrateur. Le simulateur
+   est accessible en production après connexion, avec un carnet de test isolé.
 
 Les déploiements sont sérialisés et un déploiement en cours n’est pas annulé par
 un nouveau push. Le conteneur entier est publié ; les commits peuvent limiter

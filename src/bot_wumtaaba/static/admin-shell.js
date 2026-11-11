@@ -10,11 +10,11 @@
   const nav=document.createElement('nav');nav.className='admin-navigation';nav.setAttribute('aria-label','Navigation principale');
   const environment=document.createElement('p');environment.className='admin-environment';environment.dataset.environment='';environment.textContent='Environnement';
   target.append(brand,note,nav,environment);
- }navigation(false);refresh();}
- function navigation(development){for(const target of document.querySelectorAll('[data-admin-sidebar]')){
+ }navigation();refresh();}
+ function navigation(){for(const target of document.querySelectorAll('[data-admin-sidebar]')){
   const nav=target.children[2];nav.replaceChildren();
-  for(const [id,icon,label,url] of development?[...pages,simulator]:pages){const a=document.createElement('a');a.href=url;a.dataset.page=id;a.textContent=icon+'  '+label;if(id===current()){a.className='active';a.setAttribute('aria-current','page');}nav.append(a);}
+  for(const [id,icon,label,url] of [...pages,simulator]){const a=document.createElement('a');a.href=url;a.dataset.page=id;a.textContent=icon+'  '+label;if(id===current()){a.className='active';a.setAttribute('aria-current','page');}nav.append(a);}
  }}
- async function refresh(){try{const r=await fetch('/admin/api/environment',{credentials:'same-origin',cache:'no-store'});if(!r.ok){navigation(false);return;}const value=await r.json();const dev=value.environment==='development';navigation(dev);for(const el of document.querySelectorAll('[data-environment]')){el.textContent=dev?'DEV · Base locale':'PROD · Base de production';el.className='admin-environment '+(dev?'development':'production');}}catch{navigation(false);}}
+ async function refresh(){try{const r=await fetch('/admin/api/environment',{credentials:'same-origin',cache:'no-store'});if(!r.ok)return;const value=await r.json();const dev=value.environment==='development';for(const el of document.querySelectorAll('[data-environment]')){el.textContent=dev?'DEV · Base locale':'PROD · Base de production';el.className='admin-environment '+(dev?'development':'production');}}catch{}}
  window.AdminShell={pages,current,refresh};mount();
 })();

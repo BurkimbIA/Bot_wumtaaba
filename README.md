@@ -90,8 +90,9 @@ Les modifications du code relancent le serveur ; recharger la page pour les asse
 
 La navigation regroupe **Accords, échéances et rappels**, **Conversations WhatsApp**,
 **Annotations**, **Wumtaaba Check** et **Modèles IA**. La page supplémentaire
-**[Simulateur WhatsApp](http://127.0.0.1:8000/admin/simulator)** est réservée au dev :
-elle exécute le parcours du bot avec des sessions et des accords de test isolés.
+**[Simulateur WhatsApp](http://127.0.0.1:8000/admin/simulator)** est aussi disponible
+dans le backoffice de production après connexion administrateur. Elle exécute le
+parcours du bot avec des sessions et des accords de test isolés.
 
 Le dev sert les mêmes fichiers d’interface que la production. Sa base PostgreSQL
 locale persistante reprend les **23 tables du schéma applicatif Supabase**, leurs

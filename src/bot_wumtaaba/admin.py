@@ -227,7 +227,6 @@ def install_admin(app, settings):
     install_admin_annotations(router, settings, authorized)
     install_experiments(router, authorized, same_origin)
     install_check_inference(router, settings, authorized, same_origin)
-    if getattr(app.state, "environment", "production") == "development":
-        from .dev_simulator import install_dev_simulator
-        install_dev_simulator(router, settings, authorized, same_origin)
+    from .dev_simulator import install_simulator
+    install_simulator(router, settings, authorized, same_origin)
     app.include_router(router)

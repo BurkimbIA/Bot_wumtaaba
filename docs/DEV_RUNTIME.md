@@ -35,11 +35,15 @@ Ouvrir `http://127.0.0.1:8000/admin`. Le code de connexion est celui de
 uniquement dans `data/dev/media`, jamais dans Tigris. Les tâches d’annotation
 peuvent utiliser le même stockage local avec leur chemin physique distinct.
 
-Le menu propose aussi `/admin/simulator`, absent de la production. Ce simulateur
+Le menu propose aussi `/admin/simulator`, disponible en dev et en production sous
+session administrateur. Ce simulateur
 réutilise le moteur de conversation actuel avec une base en mémoire et des médias
 temporaires distincts du backoffice. Il permet le texte, les vocaux et la sélection
 des modèles Mac. Les conversations simulées ne deviennent pas des conversations
 WhatsApp réelles ; réinitialiser la simulation efface sa session de test.
+Les essais ne sont pas persistants : ils disparaissent au redémarrage du serveur,
+y compris lorsque Fly.io s’arrête pour inactivité. Le simulateur ne maintient pas
+le serveur éveillé. En production, les appels Mac utilisent le connecteur existant.
 
 Le routage Mac des essais appelle l’API locale sur `127.0.0.1:8765`, sans toucher
 au connecteur ou à la présence Supabase de production. `DEV_MAC_API_KEY` est la

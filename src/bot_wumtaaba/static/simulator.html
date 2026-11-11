@@ -11,13 +11,13 @@
 <body class="admin-workspace">
 <aside data-admin-sidebar></aside>
 <header class="page-header">
-  <a class="brand" href="/admin">B<span>BurkimbIA <small>LABORATOIRE LOCAL</small></span></a>
+  <a class="brand" href="/admin">B<span>BurkimbIA <small>SIMULATEUR WHATSAPP</small></span></a>
   <a href="/admin/check">Outils détaillés des modèles ↗</a>
 
 </header>
 <main>
   <section class="intro">
-    <p class="eyebrow">WUUMTAABA · AVANT LA PRODUCTION</p>
+    <p class="eyebrow">WUUMTAABA · CONVERSATION SIMULÉE</p>
     <h1>Testez la conversation.</h1>
     <p>Les mêmes messages, menus et confirmations que le bot WhatsApp. Les modèles restent à votre main.</p>
   </section>
@@ -57,7 +57,7 @@
       <section class="panel">
         <p class="eyebrow">RÉGLAGES DE CET ESSAI</p>
         <h2>Choisissez les modèles</h2>
-        <label for="provider">Exécution BurkimbIA<select id="provider" data-control><option value="mac">Sur mon Mac</option></select></label>
+        <label for="provider">Exécution BurkimbIA<select id="provider" data-control><option value="mac">Mac connecté</option></select></label>
         <label for="transcription-model">Modèle de transcription<select id="transcription-model" data-control></select></label>
         <label for="mo-fr-model">Modèle mooré → français<select id="mo-fr-model" data-control></select></label>
         <button id="compare-audio" data-control type="button" class="reuse-audio">Comparer ce vocal avec ces modèles</button>
@@ -78,6 +78,7 @@
         <p id="engine-info" class="muted"></p>
         <button id="reset-session" data-control type="button">Recommencer tout l’essai</button>
         <p class="muted">Efface uniquement cette conversation et son carnet de test. Recharger la page ouvre aussi une nouvelle session.</p>
+        <p class="muted">Les essais sont temporaires et disparaissent au redémarrage du serveur.</p>
       </section>
     </aside>
   </div>

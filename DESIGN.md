@@ -13,7 +13,7 @@ Iterate locally with a separate database matching the production application sch
 Administrators review agreements and conversations; model contributors compare a saved vocal across models; annotators inspect source proposals and collected judgments; developers rehearse changes without writing production data.
 
 ## Information architecture
-One shared left navigation: Accords, échéances et rappels; Conversations WhatsApp; Annotation; Wumtaaba Check; Modèles IA. Development also exposes Simulateur WhatsApp. Existing /admin and /admin/check URLs stay valid. Accords and reminders share one page with their own filters/pagination.
+One shared left navigation in dev and production: Accords, échéances et rappels; Conversations WhatsApp; Annotation; Wumtaaba Check; Modèles IA; Simulateur WhatsApp. The authenticated simulator uses a temporary test ledger isolated from real WhatsApp data. Existing /admin and /admin/check URLs stay valid. Accords and reminders share one page with their own filters/pagination.
 
 ## Design principles
 Same frontend files in both environments. Explicit DEV/PROD identity. Isolate data and external side effects. Show actual provider capabilities; never disguise the platform cloud proxy as direct RunPod.

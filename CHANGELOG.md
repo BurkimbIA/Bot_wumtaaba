@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- Simulateur WhatsApp accessible aux administrateurs en dev et en production, avec conversations, accords et audios de test isolés du carnet réel.
 - CI/CD avec tests PostgreSQL et JavaScript, vérification du contrat des migrations et migration Fly avant publication sur `main`. Les secrets de la base de production restent sur Fly.io.
 - Backoffice commun dev/prod avec navigation partagée, annotations administrateur et environnement local isolé basé sur le schéma réel de production.
 

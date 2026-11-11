@@ -20,6 +20,7 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      TMPDIR: /tmp
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: astral-sh/setup-uv@v5
@@ -29,25 +30,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Installer FFmpeg
-        timeout-minutes: 3
+      - name: Vérifier la construction de l’image
+        run: docker build -t bot-wumtaaba:ci .
+      - name: Utiliser le FFmpeg de production pour les tests audio
         run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            # Avoid the Azure mirror when its DNS is unavailable; keep Ubuntu's signed repositories.
-            if [ -f /etc/apt/apt-mirrors.txt ]; then
-              printf 'https://archive.ubuntu.com/ubuntu/\tpriority:1\nhttps://security.ubuntu.com/ubuntu/\tpriority:2\n' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-            fi
-            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
-            sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --no-install-recommends ffmpeg
-          fi
-          ffmpeg -version
+          cat > "$RUNNER_TEMP/ffmpeg-from-image" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          exec docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --label "wuumtaaba.ci-audio=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --volume /tmp:/tmp bot-wumtaaba:ci ffmpeg "$@"
+          SH
+          chmod 755 "$RUNNER_TEMP/ffmpeg-from-image"
+          echo "FFMPEG_BINARY=$RUNNER_TEMP/ffmpeg-from-image" >> "$GITHUB_ENV"
+          "$RUNNER_TEMP/ffmpeg-from-image" -version
       - run: just install
       - run: just lint
       - run: just test
       - name: Vérifier les interfaces du laboratoire et du backoffice
         run: node --test tests/test_admin_shell.cjs tests/test_check_ui.cjs
-      - name: Vérifier la construction de l’image
-        run: docker build -t bot-wumtaaba:ci .
+      - name: Nettoyer les conversions audio du job
+        if: always()
+        run: docker ps -aq --filter "label=wuumtaaba.ci-audio=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" | xargs -r docker rm -f
   deploy:
     needs: test
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')

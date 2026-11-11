@@ -2,7 +2,44 @@
 
 **État au 10 octobre 2026 (version 0.5, avant Supabase) :** le service `bot-wumtaaba` est déployé sur une machine à Paris (`cdg`), avec 512 Mo de mémoire et un volume de 1 Go. Le contrôle de santé répond HTTP 200. Le webhook Meta est vérifié, abonné au champ `messages`, et les messages entrants sont reçus avec une réponse HTTP 200. La recette WhatsApp sur PC valide le menu, un accord texte, sa correction et son enregistrement. Un vocal de deux secondes envoyé dans la conversation de test a été transcrit en français après consentement, et le résultat est revenu sur WhatsApp. Après déploiement et redémarrage lié au renouvellement du token, le contrôle de santé répond HTTP 200 et Mes accords restitue la référence WT-B189648F avec ses montants corrigés : la persistance a été vérifiée depuis WhatsApp sur PC.
 
-## Configuration déployée
+## Circuit dev → production
+
+`just dev` sert le backoffice avec PostgreSQL local (`.env.dev`) et des audios
+locaux. Le serveur Fly utilise le secret `DATABASE_URL` déjà configuré dans
+l’application `bot-wumtaaba`, vers Supabase, schéma `wuumtaaba`. Ses audios restent
+dans le bucket Tigris privé. Aucun fichier `.env.dev` ou `.env.prod` n’est envoyé
+dans l’image et aucun identifiant Supabase n’est nécessaire dans GitHub Actions.
+
+1. Développer sur une branche, vérifier le résultat en local, committer et ouvrir
+   une PR vers `main`.
+2. La PR exécute Ruff, les tests Python sur PostgreSQL 17 jetable, les tests
+   JavaScript du backoffice/Check et la construction Docker. Les tests vérifient
+   aussi que toutes les migrations produisent le schéma attendu par le serveur.
+3. La fusion sur `main` relance ces contrôles, puis le job GitHub `production`
+   utilise `FLY_API_TOKEN`. L’environnement GitHub n’accepte que la branche `main`.
+   Un lancement manuel du workflow sur `main` permet également de republier.
+4. Fly construit l’image puis exécute les migrations versionnées avec ses propres
+   secrets, sur une Machine temporaire. Tout échec bloque le déploiement. La
+   baseline ne peut être adoptée que si l’empreinte réelle du schéma correspond.
+5. Le serveur est mis à jour, puis la CI vérifie la santé, la page admin, le refus
+   d’accès aux données sans session et l’absence du simulateur dev en production.
+
+Les déploiements sont sérialisés et un déploiement en cours n’est pas annulé par
+un nouveau push. Le conteneur entier est publié ; les commits peuvent limiter
+les changements à une page. Les données du dev ne sont jamais transférées par ce
+processus. Les migrations doivent rester compatibles avec l’ancienne version
+jusqu’au succès du déploiement ; revenir à une image précédente ne restaure pas
+automatiquement une base modifiée. Voir [les migrations](DEV_DATABASE.md).
+
+Les secrets Fly nécessaires sont contrôlés par leur nom avant la publication,
+sans afficher leur valeur. Le jeton GitHub `FLY_API_TOKEN` existe déjà au niveau
+du dépôt ; les secrets Meta, Gemini, RunPod et Tigris restent sur Fly. Le mot de
+passe dev et les cookies dev sont indépendants de ceux de production.
+
+Ce mécanisme suit les [release commands Fly.io](https://docs.fly.io/reference/configuration#the-deploy-section)
+et les [environnements GitHub Actions](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).
+
+## Exploitation de la machine
 
 Après la bascule Supabase de la version 0.7, le fichier [fly.toml](../fly.toml) décrit une machine sans volume dans la région `cdg` (Paris), avec un CPU partagé et 512 Mo de mémoire. Les accords sont dans Postgres et les audios dans un bucket privé, chez Supabase ([la base](DATABASE.md)). L’URL du webhook reste `https://bot-wumtaaba.fly.dev/webhook`.
 

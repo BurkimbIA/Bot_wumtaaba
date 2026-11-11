@@ -98,9 +98,10 @@ jobs:
           curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 https://bot-wumtaaba.fly.dev/healthz | python -c 'import json,sys; assert json.load(sys.stdin)["status"] == "ok"'
           test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin)" = 200
           test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin/api/overview)" = 401
-          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin/simulator)" = 404
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' https://bot-wumtaaba.fly.dev/admin/simulator)" = 401
+          test "$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --header 'Content-Type: application/json' --data '{}' https://bot-wumtaaba.fly.dev/admin/api/simulator/session)" = 401
       - name: Résumer la publication
         env:
           DEPLOYED_SHA: ${{ github.sha }}
         run: |
-          echo "Production publiée : ${DEPLOYED_SHA}. Migrations Fly terminées, backoffice disponible et simulateur dev absent." >> "$GITHUB_STEP_SUMMARY"
+          echo "Production publiée : ${DEPLOYED_SHA}. Migrations Fly terminées, backoffice disponible et simulateur protégé par session admin." >> "$GITHUB_STEP_SUMMARY"

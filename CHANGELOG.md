@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Gemini résume les éléments clés même sans vente détaillée et signale les traductions incertaines. Le numéro client est demandé simplement et ajouté directement au brouillon ; les accords partiels restent confirmables sans numéro. La mention de note personnelle non confirmée est retirée des résumés écrits et vocaux.
+
 - La session administrateur passe de huit heures à 30 jours et persiste en base lors des arrêts/redémarrages Fly.io. La déconnexion et le changement du code administrateur la révoquent.
 
 - All bot audio (agreements, annotation sources and admin experiments) uses private Tigris `burkimbia-store`, with Supabase retaining database records and object references. A read-only/explicit-apply migration verifies existing audio without deleting its source.

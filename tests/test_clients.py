@@ -202,6 +202,7 @@ async def test_extraction_schema_and_local_validation(extra, valid):
         assert schema["additionalProperties"] is False
         assert schema["properties"]["client_phone"] == {"type": ["string", "null"]}
         assert "client_phone" in schema["required"]
+        assert "key_points" in schema["required"]
         user_data = json.loads(payload["contents"][0]["parts"][0]["text"])
         assert user_data["brouillon"] == {"client": "Awa"}
         content = {
@@ -210,6 +211,7 @@ async def test_extraction_schema_and_local_validation(extra, valid):
             "total": 1000,
             "paid": 200,
             "due_date": "2026-10-20",
+            "key_points": "Awa : riz, 1 000 F CFA, dont 200 déjà payés.",
             **extra,
         }
         return httpx.Response(

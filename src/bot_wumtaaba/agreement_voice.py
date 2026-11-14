@@ -42,12 +42,13 @@ def spoken_summary(draft):
         return f"{value} francs CFA" if value is not None else "non renseigné"
 
     return (
-        f"Résumé de l’accord à vérifier. Client : {draft.client or 'non renseigné'}. "
+        (f"Éléments clés à vérifier. {draft.key_points} " if draft.key_points else "Résumé de l’accord à vérifier. ")
+        + f"Client : {draft.client or 'non renseigné'}. "
         f"Produit : {draft.product or 'non renseigné'}. "
         f"Prix total : {amount(draft.total)}. Avance déjà payée : {amount(draft.paid)}. "
         f"Reste à payer : {amount(draft.balance)}. "
         f"Date prévue : {draft.due_date.strftime('%d/%m/%Y') if draft.due_date else 'non renseignée'}. "
-        "Note personnelle, non confirmée par le client. Vérifie avant d’enregistrer."
+        "Vérifie avant d’enregistrer."
     )
 
 
@@ -78,7 +79,7 @@ async def moore_spoken_summary(api, draft):
         "Avance déjà payée en francs CFA",
         "Reste à payer en francs CFA",
         "Date prévue, jour mois année",
-        "Note personnelle non confirmée par le client. Vérifie avant d’enregistrer.",
+        "Vérifie avant d’enregistrer.",
         "Non renseigné",
     ]
     # Cache only generic labels on the existing provider client, never user data.
@@ -113,4 +114,12 @@ async def moore_spoken_summary(api, draft):
         ]
     )
     verify_spoken_amounts(spoken, draft)
+    if draft.key_points:
+        translated = await translate_all(api, draft.key_points, "french", "moore")
+        if re.findall(r"\d+", translated) != re.findall(r"\d+", draft.key_points):
+            raise MediaError(
+                "La lecture en mooré n’a pas conservé les nombres du résumé. "
+                "Vérifie le résumé écrit ; aucun accord enregistré."
+            )
+        spoken = translated + "\n" + spoken
     return spoken

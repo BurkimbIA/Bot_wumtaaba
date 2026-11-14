@@ -8,6 +8,8 @@ Une V1 simple : écrire ou dicter un accord en français, vérifier son résumé
 
 Après **Nouvel accord**, choisir **Français** ou **Mooré**. Le vocal mooré est transcrit et traduit en français par les modèles BurkimbIA, puis Gemini prépare le brouillon. Le résumé offre une lecture vocale facultative dans la langue choisie. Il reste nécessaire de vérifier et confirmer avant d’enregistrer. Le fournisseur BurkimbIA est celui sélectionné dans le back-office, y compris le Mac local. Voir [le parcours, les modèles et les vérifications](docs/AGREEMENT_LANGUAGES.md).
 
+Gemini résume les éléments clés, même incomplets, et signale les incertitudes de transcription ou de traduction. Lorsque le numéro du client manque, le bot le demande simplement avec son indicatif pays. Le numéro envoyé est ajouté directement au brouillon, sans liste de clients ni confirmation intermédiaire. Le bouton **Valider sans numéro** permet toujours d’enregistrer les informations disponibles.
+
 ## Paiements partiels et application mobile — version 0.6
 
 Le bot permet désormais de choisir un accord, saisir un versement, vérifier son nouveau solde puis confirmer. Chaque versement est daté dans un journal ; `historique WT-référence` donne les détails. Les accords peuvent être consultés dans l’application Flutter facultative, reliée par un code obtenu avec `application` dans WhatsApp. L’application est en lecture seule : les actions et vocaux restent dans WhatsApp. Voir [le fonctionnement, la migration et l’API mobile](docs/PAYMENTS_MOBILE.md).

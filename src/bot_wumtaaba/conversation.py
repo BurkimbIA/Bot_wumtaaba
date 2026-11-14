@@ -195,6 +195,13 @@ class Conversation:
             return state, [text(self._entry_prompt(language))], None
         if action.startswith("language:"):
             return state, [text("Ce choix de langue a expiré. Reprends avec Nouvel accord.")], None
+        if body and state.get("confirmation") and state.get("draft"):
+            phone = re.sub(r"[\s()-]", "", body)
+            if re.fullmatch(r"(?:\+|00)[1-9]\d{7,14}", phone):
+                phone = phone[2:] if phone.startswith("00") else phone[1:]
+                draft = Draft.model_validate({**state["draft"], "client_phone": phone})
+                state["draft"] = draft.model_dump(mode="json")
+                return self._review(draft, state, [])
         if action.startswith("read:"):
             return await self._read_summary(sender, message, state, action)
         if action == "help" or command == "aide":
@@ -472,16 +479,29 @@ class Conversation:
         question = draft.question()
         if question:
             return state, replies + [text(question)], None
+        return self._review(draft, state, replies)
+
+    def _review(self, draft, state, replies):
         token = uuid4().hex
         state["confirmation"] = token
+        summary = draft.summary()
+        prompt = (
+            "Quel est le numéro du client, avec l’indicatif pays ? "
+            "Envoie-le par message, ou valide sans numéro."
+            if not draft.client_phone
+            else "Corrige par message si besoin, puis confirme."
+        )
+        if len(summary + "\n\n" + prompt) > 1024:
+            replies = replies + [text(summary)]
+            summary = ""
         return (
             state,
             replies
             + [
                 buttons(
-                    draft.summary() + "\n\nCorrige par message si besoin, puis confirme.",
+                    (summary + "\n\n" if summary else "") + prompt,
                     [
-                        (f"confirm:{token}", "Enregistrer"),
+                        (f"confirm:{token}", "Enregistrer" if draft.client_phone else "Valider sans numéro"),
                         ("new", "Recommencer"),
                         (
                             f"read:{token}",

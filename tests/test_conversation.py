@@ -71,7 +71,9 @@ async def test_available_information_is_summarized_and_requires_confirmation(set
     state, replies, agreement = await bot.handle("alice", msg("Awa"), {"mode": "draft"})
     assert state.get("confirmation") and agreement is None
     assert "Non renseigné" in str(replies)
-    assert "Quel est" not in str(replies)
+    assert "Valider sans numéro" in str(replies)
+    assert "numéro du client" in str(replies)
+    assert "Choisir le client" not in str(replies)
     state, replies, agreement = await bot.handle("alice", button("confirm:" + state["confirmation"]), state)
     assert agreement["client"] == "Awa" and agreement["total"] is None
     assert agreement["paid"] is None and agreement["due_date"] is None
@@ -131,3 +133,48 @@ def test_inbox_retry_blocks_same_sender_but_not_others(setup):
     store.retry_inbox("first", "retry later")
     assert store.claim_inbox()["id"] == "third"
     assert store.claim_inbox() is None
+
+
+async def test_key_points_prompt_for_phone_and_allow_confirmation_without_it():
+    ai = AsyncMock()
+    ai.extract.return_value = Draft(key_points="Livraison à préciser avec Salif.")
+    bot = Conversation(Settings(public_access=True), AsyncMock(), ai, AsyncMock())
+    state, replies, agreement = await bot._extract("message incomplet", {}, [])
+    assert agreement is None
+    assert "numéro du client" in str(replies)
+    assert "Valider sans numéro" in str(replies)
+    state, _, agreement = await bot.handle("alice", button("confirm:" + state["confirmation"]), state)
+    assert agreement["key_points"] == "Livraison à préciser avec Salif."
+    assert agreement["client_phone"] is None
+    assert agreement["total"] is None
+    assert state == {}
+
+
+async def test_phone_followup_keeps_key_points_and_replaces_confirmation():
+    ai = AsyncMock()
+    ai.extract.return_value = Draft(key_points="Livraison à préciser avec Salif.")
+    bot = Conversation(Settings(public_access=True), AsyncMock(), ai, AsyncMock())
+    state, _, _ = await bot._extract("message incomplet", {}, [])
+    old_token = state["confirmation"]
+    state, replies, _ = await bot.handle("alice", msg("+226 70 12 34 56"), state)
+    assert state["confirmation"] != old_token
+    assert "Quel est le numéro" not in str(replies)
+    assert "Enregistrer" in str(replies)
+    assert "Associer ce numéro" not in str(replies)
+    assert "Choisir le client" not in str(replies)
+    ai.extract.assert_awaited_once()
+    _, _, agreement = await bot.handle("alice", button("confirm:" + state["confirmation"]), state)
+    assert agreement["client_phone"] == "22670123456"
+    assert agreement["key_points"] == "Livraison à préciser avec Salif."
+
+
+def test_long_summary_does_not_truncate_phone_request():
+    bot = Conversation(Settings(public_access=True), AsyncMock(), AsyncMock(), AsyncMock())
+    draft = Draft(key_points="a" * 500, client="b" * 100, product="c" * 200,
+                  total=1000000000, paid=1000000000, due_date="2026-12-20")
+    _, replies, saved = bot._review(draft, {}, [])
+    assert saved is None
+    assert replies[0]["text"]["body"] == draft.summary()
+    prompt = replies[1]["interactive"]["body"]["text"]
+    assert "indicatif pays" in prompt and "valide sans numéro" in prompt
+    assert len(prompt) <= 1024

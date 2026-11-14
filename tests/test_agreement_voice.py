@@ -294,7 +294,9 @@ async def test_partial_moore_voice_gets_summary_without_missing_field_questions(
     )
     assert state["confirmation"] and op is None
     assert "Accord à vérifier" in str(replies) and "Non renseigné" in str(replies)
-    assert "Quel est" not in str(replies) and "Quelle est" not in str(replies)
+    assert "Valider sans numéro" in str(replies)
+    assert "numéro du client" in str(replies)
+    assert "Choisir le client" not in str(replies)
     assert state["draft"]["paid"] is None and state["draft"]["due_date"] is None
 
 
@@ -311,3 +313,34 @@ async def test_partial_readback_keeps_unknown_amounts_unknown(setup):
     spoken = await moore_spoken_summary(setup.bia, draft)
     assert "30000" in spoken and "None" not in spoken
     verify_spoken_amounts(spoken, draft)
+
+
+async def test_free_key_points_are_included_in_french_and_moore_readback():
+    from bot_wumtaaba.agreement_voice import moore_spoken_summary
+
+    draft = Draft(key_points="Livraison à préciser avec Salif.")
+    assert draft.key_points in spoken_summary(draft)
+    api = AsyncMock()
+    api.translate.side_effect = lambda value, **kwargs: "Mooré : " + value
+    spoken = await moore_spoken_summary(api, draft)
+    assert "Mooré : " + draft.key_points in spoken
+
+
+@pytest.mark.parametrize("replacement", ["100000 francs le 20/12/2026", "10000 francs le 01/01/2027", "sans nombres"])
+async def test_moore_key_points_reject_changed_or_missing_numbers(replacement):
+    from bot_wumtaaba.agreement_voice import moore_spoken_summary
+
+    points = "10000 francs le 20/12/2026"
+    api = AsyncMock()
+    api.translate.side_effect = lambda value, **kwargs: replacement if value == points else value
+    with pytest.raises(MediaError, match="nombres du résumé"):
+        await moore_spoken_summary(api, Draft(key_points=points))
+
+
+async def test_moore_key_points_preserve_numbers_and_dates():
+    from bot_wumtaaba.agreement_voice import moore_spoken_summary
+
+    points = "10000 francs le 20/12/2026"
+    api = AsyncMock()
+    api.translate.side_effect = lambda value, **kwargs: value
+    assert points in await moore_spoken_summary(api, Draft(key_points=points))

@@ -42,7 +42,7 @@ def test_invalid_values_rejected(values):
 
 
 def test_empty_draft_and_overpayment_block_confirmation():
-    assert "Aucun détail" in Draft(client="  ").question()
+    assert "préciser les éléments" in Draft(client="  ").question()
     draft = complete()
     draft.paid = 11000
     assert "dépasse" in draft.question()
@@ -66,6 +66,18 @@ def test_partial_agreement_is_ready_without_invented_values():
     assert "Client : Non renseigné" in draft.summary()
     assert "Prix : Non renseigné" in draft.summary()
     assert "Date prévue : Non renseignée" in draft.summary()
+
+
+def test_key_points_without_sale_fields_can_be_reviewed_and_restored():
+    draft = Draft(key_points="Le message mentionne dix jours ; la traduction est à clarifier.")
+    restored = Draft.model_validate_json(draft.model_dump_json())
+    assert restored.question() is None
+    assert restored.key_points in restored.summary()
+    assert restored.total is None and restored.due_date is None
+
+
+def test_blank_key_points_do_not_make_an_empty_message_confirmable():
+    assert Draft(key_points="  ").question() is not None
 
 
 def test_chunks_preserve_transcription_without_loss():
